@@ -6,6 +6,7 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import skimage.transform
 
 import sep
 from matplotlib.patches import Ellipse
@@ -15,20 +16,21 @@ from pfs.utils import butler as pfsButler
 from pfs.utils import spectroIds as pfsSpectroIds
 
 import butlerMaps
+import darkCube
 import hxstack as hx
 import pfsutils
 
 reload(pfsButler)
 reload(pfsSpectroIds)
 reload(butlerMaps)
+reload(darkCube)
 reload(hx)
 reload(pfsutils)
 
 specIds = pfsSpectroIds.SpectroIds(partName='n1')
-butler = pfsButler.Butler(specIds=specIds, configRoot=butlerMaps.nirLabConfigRoot)
-butler.addMaps(butlerMaps.configMap, butlerMaps.dataMap)
-butler.addKeys(dict(nirLabReduxRoot=butlerMaps.nirLabReduxRoot,
-                    nirLabConfigRoot=butlerMaps.nirLabConfigRoot))
+nirButler = pfsButler.Butler(specIds=specIds, configRoot=butlerMaps.nirLabConfigRoot)
+nirButler.addMaps(butlerMaps.configMap, butlerMaps.dataMap)
+nirButler.addKeys(butlerMaps.configKeys)
 
 scaleDtype = np.dtype([('index', '<i4'), 
                        ('visit', '<i4'), 
@@ -37,37 +39,36 @@ scaleDtype = np.dtype([('index', '<i4'),
                        ('xpix', '<f4'), 
                        ('ypix', '<f4')])
 
-yscaleData = np.rec.array([(0, 5274, 30000,  5000, 2032.68227599,  306.15124233),
-                           (1, 5275, 30000,  7000, 2032.78224718,  688.29252832),
-                           (2, 5276, 30000,  9000, 2033.03649178, 1069.75591912),
-                           (3, 5277, 30000, 11000, 2033.04260401, 1447.24120791),
-                           (4, 5278, 30000, 13000, 2033.08429587, 1821.14349581),
-                           (5, 5279, 30000, 15000, 2032.84115206, 2190.7910757 ),
-                           (6, 5280, 30000, 17000, 2032.56526217, 2560.40970008),
-                           (7, 5281, 30000, 19000, 2031.84808211, 2927.57128883),
-                           (8, 5282, 30000, 21000, 2031.00032165, 3292.09321345),
-                           (9, 5283, 30000, 23000, 2030.33943306, 3657.17707588)],
-                          dtype=scaleDtype)
-xscaleData = np.rec.array([(0, 5284,  6000, 14500,  290.81248957, 2097.45093701),
-                           (1, 5285, 11000, 14500,  650.55960066, 2097.41935155),
-                           (2, 5286, 16000, 14500, 1011.35055024, 2098.14972351),
-                           (3, 5287, 21000, 14500, 1371.11712007, 2098.94319438),
-                           (4, 5288, 26000, 14500, 1732.90726888, 2099.59015068),
-                           (5, 5289, 31000, 14500, 2094.95596687, 2100.35489347),
-                           (6, 5290, 36000, 14500, 2457.62415515, 2101.22703119),
-                           (7, 5291, 41000, 14500, 2820.0307044 , 2102.12862705),
-                           (8, 5292, 46000, 14500, 3183.40556648, 2102.88050178),
-                           (9, 5293, 51000, 14500, 3548.148925  , 2103.49876305)],
-                          dtype=scaleDtype)
+order3step2pix = np.array([[ 4.38039071e+03, -7.82284603e-02, -1.11148770e-02,  5.76926023e-08,
+                             3.53393394e-07,  1.73296002e-07, -6.55858933e-13, -4.37487327e-14,  
+                            -4.63835782e-12, -3.51730829e-13],
+                           [-7.05568271e+02,  1.60644684e-03,  2.01131449e-01, -2.27164048e-08,  
+                            -9.69930392e-08, -7.03526714e-07, -3.82734519e-14,  1.62895921e-12,
+                             1.27740281e-13,  9.21832302e-12]])
+order3pix2step = np.array([[ 5.72137472e+04, -1.29699429e+01, 5.80691254e-01, -1.42934939e-04,
+                            -2.90384834e-04, -3.06205528e-05, 2.23651384e-08, -5.34768907e-10,
+                             1.91632524e-08, -1.92505185e-10],
+                           [ 3.50501058e+03, -7.69615008e-02,  5.08201497e+00,  2.26528896e-05,
+                             3.62525151e-05,  8.70551365e-05, -5.28844829e-10, -8.42873071e-09,
+                             1.42822503e-10, -6.74237602e-09]])
+
+stepToPix = skimage.transform.PolynomialTransform(order3step2pix)
+pixToStep = skimage.transform.PolynomialTransform(order3pix2step)
+
+projectionCoeffs = np.array([[-7.29713459e-02,  5.03186582e-03,  4.18365204e+03],
+                             [ 2.08787075e-04,  1.91548157e-01, -6.78352586e+02],
+                             [ 2.37363712e-08,  2.42779233e-06,  9.64776455e-01]])
+stepToPix = skimage.transform.ProjectiveTransform(projectionCoeffs)
+pixToStep = stepToPix.inverse
 
 # Forward and reverse maps. Assumed basically orthogonal nd quardratic
 # Have seen ~10-pix shift in x. I think steps slipped on move towards 0, so 
 #   am adding an offset.
 #
-xPixToStep = np.polynomial.Polynomial.fit(xscaleData.xpix, xscaleData.xstep, 2)
-yPixToStep = np.polynomial.Polynomial.fit(yscaleData.ypix, yscaleData.ystep, 2)
-xStepToPix = np.polynomial.Polynomial.fit(xscaleData.xstep, xscaleData.xpix, 2)
-yStepToPix = np.polynomial.Polynomial.fit(yscaleData.ystep, yscaleData.ypix, 2)
+#xPixToStep = np.polynomial.Polynomial.fit(xscaleData.xpix, xscaleData.xstep, 2)
+#yPixToStep = np.polynomial.Polynomial.fit(yscaleData.ypix, yscaleData.ystep, 2)
+#xStepToPix = np.polynomial.Polynomial.fit(xscaleData.xstep, xscaleData.xpix, 2)
+#yStepToPix = np.polynomial.Polynomial.fit(yscaleData.ystep, yscaleData.ypix, 2)
 
 class NirIlluminator(object):
     def __init__(self, forceLedOff=True, logLevel=logging.INFO):
@@ -76,9 +77,14 @@ class NirIlluminator(object):
         self._led = None
         self._ledPower = None
         self._ledChangeTime = None
-        
-        self.wavelengths = {930, 970, 1050, 1070, 1085, 1200, 1300}
-        
+
+        # Ordered by increasing X _steps_, decreasing X _pixels_ (why did I say yes?!?)
+        self.leds = pd.DataFrame(dict(wave=[1300, 1200, 1085, 1070, 1050, 970, 930],
+                                      dutyCycle=[100.0, 33, 30, 33, 19, 83, 40],
+                                      focusOffset=[4.0, 0, 0, 0, 0, 0, -10.0],
+                                      position=[3984, 3664, 2700, 2457, 2274, 846, 100]))
+        self.leds = self.leds.set_index('wave', drop=False)
+
         self.preloadDistance = 200
         self.motorSlips = (0, 0)
         
@@ -100,7 +106,7 @@ class NirIlluminator(object):
             are checked against internal limit, so should always be used to 
             move.
         """
-        ip = '192.168.1.198'
+        ip = '192.168.1.50'
         port = 9999
         
         if debug:
@@ -136,14 +142,34 @@ class NirIlluminator(object):
             
         parts = replyBuffer.split('\n')
         return parts[0]
-    
+
+    @property
+    def dutyCycle(self):
+        return self._ledPower
+        
     def ledState(self):
         if self._ledChangeTime is None:
             dt = None
         else:
             dt = time.time() - self._ledChangeTime
         return (self._led, self._ledPower, dt)
-    
+
+    def ledPosition(self, y, led=None):
+        # Ignores Y, which is wrong -- CPL
+
+        if led is None:
+            led = self._led
+ 
+        return self.leds.position[led]
+ 
+    def ledFocusOffset(self, y, led=None):
+        # Ignores Y, which is wrong -- CPL
+
+        if led is None:
+            led = self._led
+ 
+        return self.leds.loc[led]['focusOffset']
+
     def ledOffTime(self):
         _led, _ledPower, dt = self.ledState()
         
@@ -153,33 +179,49 @@ class NirIlluminator(object):
             return dt
         
     def ledsOff(self):
-        for w in self.wavelengths:
+        for w in self.leds.wave:
             self._cmd(f'led {w} 0')
         self._led = 0
         self._ledPower = 0
         self._ledChangeTime = time.time()
         
-    def led(self, wavelength, dutyCycle):
-        if wavelength not in self.wavelengths:
-            raise ValueError(f"wavelength ({wavelength}) no in {self.wavelengths}")
+    def led(self, wavelength, dutyCycle=None):
+        wavelength = int(wavelength)
+        if wavelength not in self.leds.wave.values:
+            raise ValueError(f"wavelength ({wavelength}) not in {self.leds.wave.to_list()}")
+        if dutyCycle is None:
+            dutyCycle = self.leds.dutyCycle[wavelength]
+            
         if dutyCycle < 0 or dutyCycle > 100:    
             raise ValueError(f"dutyCycle ({dutyCycle}) not in 0..100")
-            
+        dutyCycle = int(dutyCycle)
+
         if self._led is None:
             raise RuntimeError("current state of LEDs is unknown: need to call .ledsOff() before turning a LED on.")
-        if self._led in self.wavelengths and self._led != wavelength:
-            self._cmd(f'led {self._led} 0')
+        if self._led in self.leds.wave and self._led != wavelength:
+            self._cmd(f'led {self._led} 0', debug=True)
             self._led = 0
         self._led = wavelength
         self._ledPower = dutyCycle
         self._ledChangeTime = time.time()
         
-        self._cmd(f'led {self._led} {dutyCycle}')
+        self._cmd(f'led {self._led} {dutyCycle}', debug=True)
         
-    def stepsToPix(self, xSteps, ySteps):
-        return xStepToPix(xSteps), yStepToPix(ySteps)
-    def pixToSteps(self, xPix, yPix):
-        return int(round(xPixToStep(xPix))), int(round(yPixToStep(yPix)))
+    def stepsToPix(self, steps):
+        steps = np.array(steps)
+        upDim = steps.ndim < 2
+        if upDim:
+            steps = np.atleast_2d(steps)
+        pix = stepToPix(steps)
+        return pix[0] if upDim else pix
+
+    def pixToSteps(self, pix):
+        pix = np.array(pix)
+        upDim = pix.ndim < 2
+        if upDim:
+            pix = np.atleast_2d(pix)
+        steps = np.round(pixToStep(pix)).astype('i4')
+        return steps[0] if upDim else steps
 
     def getSteps(self):
         xPos = int(self._cmd('/1?0'))
@@ -189,7 +231,7 @@ class NirIlluminator(object):
 
     def getPix(self):
         xSteps, ySteps = self.getSteps()
-        return self.stepsToPix(xSteps, ySteps)
+        return self.stepsToPix([xSteps, ySteps])
     
     def moveSteps(self, dx, dy):
         xPos, yPos = self.getSteps()
@@ -215,10 +257,10 @@ class NirIlluminator(object):
         return xNew, yNew
             
     def moveToPix(self, xpix, ypix, preload=True):
-        xstep, ystep = self.pixToSteps(xpix, ypix)
+        xstep, ystep = self.pixToSteps([xpix, ypix])
         
         xNew, yNew = self.moveTo(xstep, ystep, preload=preload)
-        return self.stepsToPix(xNew, yNew)
+        return self.stepsToPix([xNew, yNew])
         
 def takeSuperDark(meade, nexp=3, nread=3, force=False, cam='n1'):
     offtimeRequired = 3600
@@ -227,25 +269,21 @@ def takeSuperDark(meade, nexp=3, nread=3, force=False, cam='n1'):
         if not force:
             raise RuntimeError(f"need lamps to be off for {offtimeRequired}, not {offTime} seconds")
 
-    paths = []
     visits = []
     for i in range(nexp):
-        pfsutils.oneCmd(f'hx_{cam}', f'ramp nread={nread}',quiet=False)
-        path = hx.lastRamp(cam=cam)
-        paths.append(path)
-        visits.append(pfsutils.pathToVisit(path))
-        
-    superDark = hx.medianCubes(visits)
-        
-    return superDark, visits
+        visit = takeRamp(cam, nread=nread)
+        visits.append(visit)
+
+    superDark = darkCube.DarkCube.createFromVisits(visits)
+    return superDark
 
 def takeRamp(cam, nread):
     pfsutils.oneCmd(f'hx_{cam}', f'ramp nread={nread}')
-    visit = pfsutils.pathToVisit(hx.lastRamp(cam=cam))
+    visit = hx.pathToVisit(hx.lastRamp(cam=cam))
     
     return visit
 
-def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, nramp=1, posInPixels=True):
+def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True):
     """Move to the given positions and acquire spots.
     
     Args
@@ -253,12 +291,11 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, nramp=1, posInPix
     xpos, ypos : number or array
       The positions to acquire at. Iterates over x first.
       If one position is a scalar, is expanded to match the other axis.
+      If xpos is None, use the nominal led position.
     led : (wavelength, dutyCycle)
       What lamp to turn on. If passed in, lamp is turned off at end of scan.
     nread : int
       How many reads to take per ramp
-    nramp : int
-      How many ramps to take at each position
     posInPixels : bool
       Whether `xpos` and `ypos` are in pixels or steps.
     
@@ -266,10 +303,15 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, nramp=1, posInPix
     before acquiring data. 
     """
     
-    if led is not None:
-        wavelength, dutyCycle = led
+    if led is not None and led != (None,None):
+        if np.isscalar(led):
+            wavelength = led
+            dutyCycle = None
+        else:
+            wavelength, dutyCycle = led
         meade.led(wavelength=wavelength, dutyCycle=dutyCycle)
-
+        if xpos is None:
+            xpos = meade.leds.position[wavelength]
     res = []
     
     if np.isscalar(xpos):
@@ -285,31 +327,34 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, nramp=1, posInPix
     ypos = sorted(ypos)
     
     callRet = []
+    lastXStep = lastYStep = 99999
     for x_i, x in enumerate(xpos):
         for y_i, y in enumerate(ypos):
-            if y_i == 0 and (x_i == 0 or len(ypos) > 1):
-                preload = True
-            else:
-                preload = False
             if posInPixels:
-                x1, y1 = meade.pixToSteps(x, y)
+                xStep, yStep = meade.pixToSteps([x, y])
             else:
-                x1, y1 = x, y
-            meade.moveTo(x1, y1, preload=preload)
-            
-            for r_i in range(nramp):
-                visit = takeRamp('n1', nread=nread)
-                
-                res.append([visit, x1, y1])
-                
+                xStep, yStep = x, y
+
+            # We want to always move in the same direction: from low.
+            preload = (xStep < lastXStep or yStep < lastYStep)
+            meade.moveTo(xStep, yStep, preload=preload)
+            lastXStep = xStep
+            lastYStep = yStep
+
             if call is not None:
                 ret = call(meade)
                 callRet.append(ret)
+            else:
+                visit = takeRamp('n1', nread=nread)
+                res.append([visit, xStep, yStep])
 
     if led is not None:
         meade.ledsOff()
-        
-    return pd.DataFrame(res, columns=('visit', 'xsteps', 'ysteps')), callRet
+
+    if call is None:
+        return [pd.DataFrame(res, columns=('visit', 'xstep', 'ystep'))]
+    else:
+        return callRet
 
 def checkMoveRepeats(meade, start=(2000,2000), nrep=10, npos=5, pixStep=2):
     xrepeats = []
@@ -325,14 +370,14 @@ def checkMoveRepeats(meade, start=(2000,2000), nrep=10, npos=5, pixStep=2):
     for i in range(nrep):
         farx, fary = rng.uniform(0,4096), rng.uniform(0,4096)
     
-        tscan = nirander.motorScan(meade, farx, fary, led=(1085,30))
+        tscan = motorScan(meade, farx, fary, led=(1085,30))
         far.append(tscan)
-        tscan = nirander.motorScan(meade, xx, y0, led=(1085,30))
+        tscan = motorScan(meade, xx, y0, led=(1085,30))
         xrepeats.append(tscan)
     
-        tscan = nirander.motorScan(meade, farx, fary, led=(1085,30))
+        tscan = motorScan(meade, farx, fary, led=(1085,30))
         far.append(tscan)
-        tscan = nirander.motorScan(meade, x0, yy, led=(1085,30))
+        tscan = motorScan(meade, x0, yy, led=(1085,30))
         yrepeats.append(tscan)
         
     measureSet(meade, far)
@@ -355,10 +400,10 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     yy = np.arange(y0,y0+yscale*npos,yscale)
 
     for i in range(nreps):
-        xscan = nirander.motorScan(meade, x0, yy, led=(1085,30), posInPixels=False)
+        xscan = motorScan(meade, x0, yy, led=(1085,30), posInPixels=False)
         xrepeats.append(xscan)
 
-        yscan = nirander.motorScan(meade, xx, y0, led=(1085,30), posInPixels=False)
+        yscan = motorScan(meade, xx, y0, led=(1085,30), posInPixels=False)
         yrepeats.append(yscan)
     
     xreps = pd.concat(xrepeats, ignore_index=True)
@@ -369,24 +414,72 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     
     return xreps, yreps
 
-def oversample(grid, center, rad=10, oversample=3):
-    indim = slice(center-rad, slice+rad+1)
-    outdim = oversample*(rad*2 + 1)
-    osImage = np.zeros((dim, dim), dtype=np.float32)
-
-def ditherAt(meade, center, npos=3, nread=3, xsteps=5, ysteps=2):
+def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
     if npos%2 != 1:
-        raise ValuError("not willing to deal with non-odd dithering")
+        raise ValueError("not willing to deal with non-odd dithering")
     rad = npos//2
-    xc, yc = meade.pixToSteps(*center)
-    x0, y0 = xc-rad, yc-rad
+    xc, yc = meade.pixToSteps([meade.leds.position[led], row])
+    x0, y0 = xc-(rad*xsteps), yc-(rad*ysteps)
     
-    xx = np.arange(x0,x0+xsteps*npos,xsteps)
-    yy = np.arange(y0,y0+ysteps*npos,ysteps)
+    xx = x0 + np.arange(npos)*xsteps
+    yy = y0 + np.arange(npos)*ysteps
 
-    gridVisits = nirander.motorScan(meade, xx, yy, led=(1085,30), posInPixels=False)
+    visits = []
+    for r_i in range(nramps):
+        gridVisits = motorScan(meade, xx, yy, led=led, posInPixels=False)
+        visits.extend(gridVisits)
 
-    return gridVisits, oversample(gridVisits)
+    return pd.concat(visits, ignore_index=True)
+
+def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
+              nramps=3):
+    if waves is None:
+        waves = meade.leds.wave
+    if np.isscalar(waves):
+        waves = [waves]
+        
+    if np.isscalar(rows):
+        rows = [rows]
+    rows = np.array(rows, dtype='f4')
+    
+    if np.isscalar(focus):
+        focus = [focus]
+    focus = np.array(focus, dtype='f4')
+    
+    ditherList = []
+    try:
+        for w_i, w in enumerate(waves):
+            meade.led(w)
+            led, dutyCycle, _ = meade.ledState()
+            for r_i, row in enumerate(rows):
+                for f_i, f in enumerate(focus):
+                    print(f"led {w} on row {row} with focus {f}")
+                    pfsutils.oneCmd('xcu_n1', f'motors move piston={f} abs microns')
+                    try:
+                        ret = ditherAt(meade, w, row, nramps=nramps)
+                    except Exception as e:
+                        breakpoint()
+
+                    ret['focus'] = f
+                    ret['wavelength'] = w
+                    ret['dutyCycle'] = dutyCycle
+                    ditherList.append(ret)
+                    
+                    print("ditherList: ", ditherList)
+                    rowFrame =  pd.concat(ditherList, ignore_index=True)
+                    if butler is not None:
+                        outFileName = butler.get('measures', idDict=dict(visit=rowFrame.visit.min()))
+                        outFileName.parent.mkdir(mode=0o2775, parents=True, exist_ok=True)
+                        with open(outFileName, mode='w') as outf:
+                            outf.write(rowFrame.to_string())
+                            print(f"wrote {len(rowFrame)} lines to {outFileName} at led {w} on row {row} with focus {f}")
+    except Exception as e:
+        print(f'oops: {e}')
+        breakpoint()
+        raise
+    finally:
+        meade.ledsOff()
+        return ditherList
 
 def trimRect(im, c, r=100):
     cx, cy = c
@@ -408,8 +501,7 @@ def getPeaks(im, thresh=250.0, mask=None, center=None, radius=100):
         spotsFrame = spotsFrame.loc[keep_w]
         if len(spotsFrame) != 1:
             print(f'got {len(spotsFrame)} spots near {center}')
-            spotsFrame = spotsFrame.iloc[0].copy()
-            spotsFrame[["x","y","x2","y2","peak","flux"]] = np.nan
+            spotsFrame = None
 
     return corrImg, spotsFrame
 
@@ -480,24 +572,26 @@ def brightestSpot(spots):
     return None
 
 def getBestFocus(sweep):
+    sweep = sweep.dropna()
     x = sweep.sort_values(by='focus')['focus']
     y = sweep.sort_values(by='focus')['size']
+
     poly = np.polynomial.Polynomial.fit(x,y,2)
     c,b,a = poly.convert().coef
     minx = -b/(2*a)
     return minx, poly
 
-def getFocusGrid(seed, spacing=2, r=5):
-    focusReq = seed + (np.arange(2*r-1) - (r-1))*spacing
+def getFocusGrid(center, spacing=2, r=5):
+    focusReq = center + (np.arange(2*r-1) - (r-1))*spacing
     return focusReq
 
-def _scanForFocus(seed, spacing, r, nread=3, cam='n1'):
-    focusReq = getFocusGrid(seed, spacing=spacing, r=r)
+def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
+    focusReq = getFocusGrid(center, spacing=spacing, r=r)
     print(focusReq)
     
     if focusReq[0] < 15:
         raise RuntimeError(f"focusReq[0] too low, not starting below: focusReq")
-        
+
     pfsutils.oneCmd(f'xcu_{cam}', f"motors move piston={focusReq[0]-10} abs microns")
 
     visits = []
@@ -506,30 +600,89 @@ def _scanForFocus(seed, spacing, r, nread=3, cam='n1'):
         visit = takeRamp(cam=cam, nread=nread)
         visits.append(visit)
         
-    return pd.DataFrame(dict(visit=visits, focus=focusReq))
-               
-def scanForFocus(seed, spacing=5, r=4):
-    return _scanForFocus(seed, spacing=spacing, r=r)
-def scanForCrudeFocus(seed, spacing=25, r=3):
-    return _scanForFocus(seed, spacing=spacing, r=r)
+    scanFrame = pd.DataFrame(dict(visit=visits, focus=focusReq))
 
-def measureSet(scans, hxWork, thresh=1000, center=None, radius=100):
-    for f in 'x2', 'y2', 'xpix', 'ypix', 'flux', 'peak':
-        scans[f] = np.nan
+    if measureCall is not None:
+        try:
+            focusSet = measureCall(scanFrame)
+            bestFocus, focusPoly = getBestFocus(focusSet)
+            print(f"best focus: {bestFocus}")
+            if (bestFocus is not None and 
+                bestFocus >= focusReq[0] and
+                bestFocus <= focusReq[-1]):
 
-    for i in range(len(scans)):
-        corrImg, spots = getPeaks(hxWork.isr(scans.visit[i]),
+                pfsutils.oneCmd(f'xcu_{cam}', f"motors move piston={bestFocus} abs microns")
+                visit = takeRamp(cam=cam, nread=nread)
+                visits.append(visit)
+
+                bestSize = focusPoly(bestFocus)
+                bestFrame = pd.DataFrame(dict(visit=[visit], focus=[bestFocus]))
+                measureCall(bestFrame)
+                print(f"expected {bestSize:0.2f}, got {bestFrame['size'].values[0]:0.2f} ")
+
+                scanFrame = pd.concat([scanFrame, bestFrame], ignore_index=True)
+        except Exception as e:
+            print(f"Failed to measure and go to best focus: {e}")
+
+    return scanFrame
+            
+
+def scanForFocus(center, spacing=5, r=4, measureCall=None):
+    return _scanForFocus(center, spacing=spacing, r=r, measureCall=measureCall)
+def scanForCrudeFocus(center, spacing=25, r=3, measureCall=None):
+    return _scanForFocus(center, spacing=spacing, r=r, measureCall=measureCall)
+
+def measureSet(scans, hxCalib, thresh=250, center=None, radius=100, skipDone=True):
+    """Measure the best spots in a DataFrame of images
+    
+    Parameters
+    ----------
+    scans : `pd.DataFrame`
+        [description]
+    hxCalib : `HxCalib`
+        [description]
+    thresh : int, optional
+        [description], by default 250
+    center : [type], optional
+        [description], by default None
+    radius : int, optional
+        [description], by default 100
+    skipDone : bool, optional
+        [description], by default True
+    
+    Returns
+    -------
+    [type]
+        [description]
+    """
+       
+    for f in 'x2', 'y2', 'xpix', 'ypix', 'flux', 'peak', 'size':
+        if f not in scans:
+            scans[f] = np.nan
+
+    if skipDone:
+        notDone = scans[scans.xpix.isna()].index
+    else:
+        notDone = scans.index
+
+    for scan_i in notDone:        
+        if center is None:
+            center = stepToPix([scans.loc[scan_i, 'xstep'], 
+                                scans.loc[scan_i, 'ystep']])
+
+        corrImg, spots = getPeaks(hxCalib.isr(scans.loc[scan_i, 'visit']),
                                   center=center, radius=radius,
                                   thresh=thresh, 
-                                  mask=hxWork.badMask)
-        bestSpot = spots.loc[spots.flux.idxmax()]
-        scan_i =  scans.index[i]
-        scans.loc[scan_i, 'xpix'] = bestSpot.x
-        scans.loc[scan_i, 'ypix'] = bestSpot.y
-        scans.loc[scan_i, 'x2'] = bestSpot.x2
-        scans.loc[scan_i, 'y2'] = bestSpot.y2
-        scans.loc[scan_i, 'size'] =  (bestSpot.x2 + bestSpot.y2)/2
-        scans.loc[scan_i, 'flux'] = bestSpot.flux
-        scans.loc[scan_i, 'peak'] = bestSpot.peak
+                                  mask=hxCalib.badMask)
+        breakpoint()
+        if spots is not None:
+            bestSpot = spots.loc[spots.flux.idxmax()]
+            scans.loc[scan_i, 'xpix'] = bestSpot.x
+            scans.loc[scan_i, 'ypix'] = bestSpot.y
+            scans.loc[scan_i, 'x2'] = bestSpot.x2
+            scans.loc[scan_i, 'y2'] = bestSpot.y2
+            scans.loc[scan_i, 'size'] =  (bestSpot.x2 + bestSpot.y2)/2
+            scans.loc[scan_i, 'flux'] = bestSpot.flux
+            scans.loc[scan_i, 'peak'] = bestSpot.peak
     
     return scans

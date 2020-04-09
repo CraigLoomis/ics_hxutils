@@ -7,8 +7,10 @@ import matplotlib.pyplot as plt
 
 import sep
 
+import nirander
 import hxstack as hx
 reload(hx)
+reload(nirander)
 
 def camFromPath(fname):
     p = pathlib.Path(fname)
@@ -302,3 +304,39 @@ def plotRefs(fname, reads=None, refRows=None, r0=0):
 
         #p2.plot(np.median(left, axis=0))
         #p2.plot(np.median(right, axis=0))
+
+def focusPlot(sweep, p=None, title=None):
+    if p is None:
+        f,p1 = plt.subplots(num='focusPlot', clear=True)
+    else:
+        f = None
+        p1 = p
+    
+    if title is None:
+        title = f"{sweep['wavelength'].values[0]:0.0f} ({sweep['xpix'].values[0]:0.0f},{sweep['ypix'].values[0]:0.0f})"
+        
+    sweep = sweep.sort_values(by=['focus'])
+
+    minx, poly = nirander.getBestFocus(sweep)
+    p1.plot(sweep.focus, sweep.x2, '+-', alpha=0.3, label='x')
+    p1.plot(sweep.focus, sweep.y2, '+-', alpha=0.3, label='y')
+    p1.plot(sweep.focus, sweep['size'], '+-', alpha=0.75, label='(x+y)/2')
+    
+    xx = np.linspace(sweep.focus.min(), sweep.focus.max()+1, 100)
+    yy = poly(xx)
+    # print(f'{title}: {minx:0.2f}, {poly(minx):0.2f}')
+    p1.plot(xx, yy, label=f'best={minx:0.0f}')
+    p1.plot([minx], [poly(minx)], 'kx', markersize=10)
+    p1.legend(fontsize='x-small')
+    p1.grid(alpha=0.2)
+    p1.set_title(title)
+        
+    return f, minx, poly(minx)
+
+def focusOffsetPlot(meade, focusResults, visit=None):
+    f, pl = plt.subplots(num='focusOffsetGrid', clear=True)
+    x, y = meade.stepsToPix(focusResults['xstep'], focusResults['ystep'])
+    val = pl.scatter(x.values, y.values, c=focusResults['focus'].values, cmap=plt.cm.get_cmap('viridis'))
+    f.colorbar(val)
+    f.suptitle(f'best focus, from visit={visit}')
+    return f

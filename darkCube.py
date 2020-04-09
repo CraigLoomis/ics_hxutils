@@ -35,9 +35,15 @@ class DarkCube(object):
         ff.write(data=None, header=hdr)
 
         for i in range(self.nread):
-            ff.write(self._cube[i], compress='gzip_2')
-            #ff.write(self._cube[i].astype('i2'), compress='rice')
+            ff.write(self._cube[i]) # , compress='GZIP_2')  # Jesus this takes forever!
         ff.close()
+
+    @classmethod
+    def createFromVisits(cls, visits, cam=None):
+        cube = hx.medianCubes(visits, cam=cam)
+
+        self = cls(cube, visits=visits)
+        return self
         
     @classmethod
     def loadFromFits(cls, path):
@@ -48,10 +54,9 @@ class DarkCube(object):
         cds = []
         for i in range(len(visits)):
             cds.append(ff[i+1].read())
+        cube = np.stack(cds)
 
-        cube = np.stack(cds) # .astype('f4')
         self = cls(cube, visits=visits)
-
         return self
                        
     def cds(self, r0=0, r1=-1):

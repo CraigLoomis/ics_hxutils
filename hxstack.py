@@ -39,21 +39,6 @@ class HxCalib(object):
         else:
             return cds - dark
 
-class xxxDarkCube(object):
-    def __init__(self, cube, visits=None, center=None):
-        self._cube = cube
-        self.visits = visits
-        self.nreads = len(self._cube)
-        self.center = center
-        
-    def __getitem__(self, ii):
-        return self.cds(r1=ii)
-    
-    def cds(self, r0=0, r1=-1):
-        if r0 != 0:
-            raise ValueError(f'can only take full CDS from DarkCubes, not with r0={r0}')
-        return self._cube[r1]
-    
 def sliceIndices(seqOrLength, _slice):
 
     if not isinstance(_slice, slice):
@@ -308,9 +293,7 @@ def medianCubes(visits, r0=0, r1=-1, cam=None, doCorrect=True):
             
         outStack[read_i, :, :] = np.median(tempStack, axis=0)
     
-    return DarkCube(outStack)
-        
-    # for v_i, v in visits
+    return outStack
                 
 def irpCorrect(im):
     height, width = im.shape
