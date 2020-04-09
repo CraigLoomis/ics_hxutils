@@ -1,0 +1,7 @@
+*.pdf
+*.jpg
+*.jpeg
+*.out
+*.fits
+
+/.ipynb_checkpoints
