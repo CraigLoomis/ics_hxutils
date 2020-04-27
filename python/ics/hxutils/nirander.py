@@ -28,7 +28,8 @@ reload(hx)
 reload(pfsutils)
 
 specIds = pfsSpectroIds.SpectroIds(partName='n1')
-nirButler = pfsButler.Butler(specIds=specIds, configRoot=butlerMaps.nirLabConfigRoot)
+nirButler = pfsButler.Butler(specIds=specIds, 
+                             configRoot=butlerMaps.configKeys['nirLabConfigRoot'])
 nirButler.addMaps(butlerMaps.configMap, butlerMaps.dataMap)
 nirButler.addKeys(butlerMaps.configKeys)
 
@@ -106,7 +107,7 @@ class NirIlluminator(object):
             are checked against internal limit, so should always be used to 
             move.
         """
-        ip = '192.168.1.50'
+        ip = '192.168.1.12'
         port = 9999
         
         if debug:
@@ -632,7 +633,7 @@ def scanForFocus(center, spacing=5, r=4, measureCall=None):
 def scanForCrudeFocus(center, spacing=25, r=3, measureCall=None):
     return _scanForFocus(center, spacing=spacing, r=r, measureCall=measureCall)
 
-def measureSet(scans, hxCalib, thresh=250, center=None, radius=100, skipDone=True):
+def measureSet(scans, hxCalib, thresh=250, center=None, radius=100, skipDone=False):
     """Measure the best spots in a DataFrame of images
     
     Parameters
@@ -667,15 +668,20 @@ def measureSet(scans, hxCalib, thresh=250, center=None, radius=100, skipDone=Tru
 
     for scan_i in notDone:        
         if center is None:
-            center = stepToPix([scans.loc[scan_i, 'xstep'], 
-                                scans.loc[scan_i, 'ystep']])
-
+            pixCenter = [scans.loc[scan_i, 'xstep'], scans.loc[scan_i, 'ystep']]
+            center_i = stepToPix(pixCenter)
+            # print(f"{scan_i} center={center} from {pixCenter}")
+        else:
+            center_i = center
+            
         corrImg, spots = getPeaks(hxCalib.isr(scans.loc[scan_i, 'visit']),
-                                  center=center, radius=radius,
+                                  center=center_i, radius=radius,
                                   thresh=thresh, 
                                   mask=hxCalib.badMask)
-        breakpoint()
+        if spots is None:
+            print(f"nope: i={scan_i}, scan={scans.loc[scan_i]}")
         if spots is not None:
+            print(f"    : i={scan_i}, visit={scans.loc[scan_i, 'visit']}")
             bestSpot = spots.loc[spots.flux.idxmax()]
             scans.loc[scan_i, 'xpix'] = bestSpot.x
             scans.loc[scan_i, 'ypix'] = bestSpot.y

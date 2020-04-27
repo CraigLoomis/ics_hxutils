@@ -23,7 +23,11 @@ dataMap['dark'] = dict(template="{nirLabReduxRoot}/{cam}/calibs/dark-{visit:06d}
 
 dataMap['isr'] = dict(template="{reduxDir}/isr-{visit:06d}-{cam}.fits")
 dataMap['postageStamp'] = dict(template="{reduxDir}/ps-{visit:06d}-{cam}.fits")
-dataMap['dither'] = dict(template="{reduxDir}/dither-{wave:0.0f}_{row:0.0f}_{focus:0.0f}_{visit:06d}-{cam}.fits")
+dataMap['dither'] = dict(template="{reduxDir}/dither-{wave:04.0f}_{row:04.0f}_{focus:03.0f}_{visit:06d}-{cam}.fits")
+
+dataMap['repeatsGrid'] = dict(template="{reduxDir}/repeatsGrid-{wave:04.0f}_{row:04.0f}-{cam}.fits")
+dataMap['waveGrid'] = dict(template="{reduxDir}/waveGrid-{wave:04.0f}-{cam}.fits")
+dataMap['focusGrid'] = dict(template="{reduxDir}/focusGrid-{focus:03.0f}-{cam}.fits")
 
 dataMap['measures'] = dict(template="{reduxDir}/measures-{visit:06d}-{cam}.txt")
 
