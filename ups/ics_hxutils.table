@@ -1,0 +1,2 @@
+setupRequired(pfs_utils)
+pathPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
