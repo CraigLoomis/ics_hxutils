@@ -263,6 +263,15 @@ class NirIlluminator(object):
         xNew, yNew = self.moveTo(xstep, ystep, preload=preload)
         return self.stepsToPix([xNew, yNew])
         
+    def home(self, doX=True, doY=True):
+        """Home one or more axes. Both by default. The controller leaves it """       
+
+        if doX:
+            self._cmd("home x", maxTime=100)
+        if doY:
+            self._cmd("home y", maxTime=100)
+        return self.getSteps()
+        
 def takeSuperDark(meade, nexp=3, nread=3, force=False, cam='n1'):
     offtimeRequired = 3600
     offTime = meade.ledOffTime()
