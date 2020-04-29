@@ -15,10 +15,10 @@ from scipy.spatial.distance import cdist
 from pfs.utils import butler as pfsButler
 from pfs.utils import spectroIds as pfsSpectroIds
 
-import butlerMaps
-import darkCube
-import hxstack as hx
-import pfsutils
+from . import butlerMaps
+from . import darkCube
+from . import hxstack as hx
+from . import pfsutils
 
 reload(pfsButler)
 reload(pfsSpectroIds)
