@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import skimage.transform
+import fitsio
 
 import sep
 from matplotlib.patches import Ellipse
@@ -391,6 +392,8 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     return xreps, yreps
 
 def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
+    """Acquire dithered imaged at a given position. """
+
     if npos%2 != 1:
         raise ValueError("not willing to deal with non-odd dithering")
     rad = npos//2
@@ -407,21 +410,98 @@ def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
 
     return pd.concat(visits, ignore_index=True)
 
+def createDither(frames, hxCalib, rad=15, doNorm=True):
+
+    scale = 3
+    ctrIdx = (scale*scale+1)//2
+    xsteps = frames['xstep'].unique()
+    ysteps = frames['ystep'].unique()
+    
+    xoffsets = {xs:xi for xi,xs in enumerate(xsteps)}
+    yoffsets = {ys:(scale-1)-yi for yi,ys in enumerate(ysteps)}
+    # Need better sanity checks
+    if len(frames) != scale*scale or len(xsteps) != scale or len(ysteps) != scale:
+        raise ValueError("only want to deal with 3x3 dithers")
+
+    ctr = np.round(frames[['xpix','ypix']].values[ctrIdx]).astype('i4')
+    xslice = slice(ctr[0]-rad, ctr[0]+rad)
+    yslice = slice(ctr[1]-rad, ctr[1]+rad)
+
+    outIm = np.zeros((rad*2*scale, rad*2*scale), dtype='f4')
+    bkgndMask = np.ones((rad*2, rad*2), dtype='f4')
+    bkgndMask[rad-10:rad+11, rad-10:rad+11] = 0
+    maskIm = hxCalib.badMask[yslice,xslice]
+    bkgndMask *= 1-maskIm
+    print(f"{bkgndMask.sum()}/{bkgndMask.size}")
+    outIms = []
+    for f_i, fIdx in enumerate(frames.index):
+        f1 = frames.loc[fIdx]
+        im = hxCalib.isr(f1.visit)
+        im = im[yslice,xslice].astype('f4')
+        maskedIm = im*bkgndMask
+        bkgnd = np.median(maskedIm)
+        im -= bkgnd
+        maskedIm = im*bkgndMask
+
+        if f_i == 0:
+            normSum = np.sum(maskedIm, dtype='f8')
+        imSum = np.sum(maskedIm, dtype='f8')
+        if doNorm:
+            im *= (normSum/imSum).astype('f4')
+        xoff = xoffsets[f1.xstep]
+        yoff = yoffsets[f1.ystep]
+        print(f'{f1.visit:0.0f}: wave: {f1.wavelength} focus: {f1.focus} '
+              f'pix: {xoff} {yoff} step: {f1.xstep:0.0f},{f1.ystep:0.0f} '
+              f'ctr: {f1.xpix:0.2f},{f1.ypix:0.2f} bkgnd: {bkgnd:0.3f} '
+              f'scale: {normSum:0.1f}/{imSum:0.1f}={normSum/imSum:0.3f}')
+        outIm[yoff::scale, xoff::scale] = im
+        outIms.append(im)
+
+    return outIm, outIms
+
+def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=True):
+    dithers = []
+    for i in range(len(frames)//9):
+        dithFrames = frames.iloc[i*9:(i+1)*9]
+        print(len(dithFrames))
+        dith1, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm)
+        dithers.append(dith1)
+
+        if butler is not None:
+            row = dithFrames.iloc[0]
+            path = butler.get('dither', 
+                              idDict=dict(visit=int(row.visit),
+                                          wave=int(row.wavelength),
+                                          focus=row.focus,
+                                          row=(np.round(row.ypix/100)*100)))
+            hdr = [dict(name='VISIT', value=int(row.visit), comment="visit of 0,0 image"),
+                   dict(name='WAVE', value=row.wavelength),                   
+                   dict(name='FOCUS', value=row.focus),
+                   dict(name='XPIX', value=row.xpix, comment="measured xc of 0,0 image"),
+                   dict(name='YPIX', value=row.ypix, comment="measured yc of 0,0 image"),
+                   dict(name='XSTEP', value=row.xstep),
+                   dict(name='YSTEP', value=row.ystep),
+                   dict(name='SIZE', value=row.size, comment="measured RMS of 0,0 image"),
+                   dict(name='FLUX', value=row.flux, comment="measured total flux of 0,0 image"),
+                   dict(name='PEAK', value=row.peak, comment="measured peak of 0,0 image")]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fitsio.write(path, dith1, header=hdr, clobber=True)
+
 def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
               nramps=3):
     if waves is None:
         waves = meade.leds.wave
     if np.isscalar(waves):
         waves = [waves]
-        
+
     if np.isscalar(rows):
         rows = [rows]
     rows = np.array(rows, dtype='f4')
-    
+
     if np.isscalar(focus):
         focus = [focus]
     focus = np.array(focus, dtype='f4')
-    
+
     ditherList = []
     try:
         for w_i, w in enumerate(waves):
@@ -440,7 +520,7 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
                     ret['wavelength'] = w
                     ret['dutyCycle'] = dutyCycle
                     ditherList.append(ret)
-                    
+
                     print("ditherList: ", ditherList)
                     rowFrame =  pd.concat(ditherList, ignore_index=True)
                     if butler is not None:
