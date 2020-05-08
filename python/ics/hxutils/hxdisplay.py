@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 
 import sep
 
-from ics.hxutils import nirander
-from ics.hxutils import hxstack as hx
+from . import nirander
+from . import hxstack as hx
 reload(hx)
 reload(nirander)
 

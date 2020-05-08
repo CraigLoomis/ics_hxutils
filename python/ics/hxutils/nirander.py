@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import skimage.transform
+import fitsio
 
 import sep
 from matplotlib.patches import Ellipse
@@ -40,36 +41,11 @@ scaleDtype = np.dtype([('index', '<i4'),
                        ('xpix', '<f4'), 
                        ('ypix', '<f4')])
 
-order3step2pix = np.array([[ 4.38039071e+03, -7.82284603e-02, -1.11148770e-02,  5.76926023e-08,
-                             3.53393394e-07,  1.73296002e-07, -6.55858933e-13, -4.37487327e-14,  
-                            -4.63835782e-12, -3.51730829e-13],
-                           [-7.05568271e+02,  1.60644684e-03,  2.01131449e-01, -2.27164048e-08,  
-                            -9.69930392e-08, -7.03526714e-07, -3.82734519e-14,  1.62895921e-12,
-                             1.27740281e-13,  9.21832302e-12]])
-order3pix2step = np.array([[ 5.72137472e+04, -1.29699429e+01, 5.80691254e-01, -1.42934939e-04,
-                            -2.90384834e-04, -3.06205528e-05, 2.23651384e-08, -5.34768907e-10,
-                             1.91632524e-08, -1.92505185e-10],
-                           [ 3.50501058e+03, -7.69615008e-02,  5.08201497e+00,  2.26528896e-05,
-                             3.62525151e-05,  8.70551365e-05, -5.28844829e-10, -8.42873071e-09,
-                             1.42822503e-10, -6.74237602e-09]])
-
-stepToPix = skimage.transform.PolynomialTransform(order3step2pix)
-pixToStep = skimage.transform.PolynomialTransform(order3pix2step)
-
 projectionCoeffs = np.array([[-7.29713459e-02,  5.03186582e-03,  4.18365204e+03],
                              [ 2.08787075e-04,  1.91548157e-01, -6.78352586e+02],
                              [ 2.37363712e-08,  2.42779233e-06,  9.64776455e-01]])
 stepToPix = skimage.transform.ProjectiveTransform(projectionCoeffs)
 pixToStep = stepToPix.inverse
-
-# Forward and reverse maps. Assumed basically orthogonal nd quardratic
-# Have seen ~10-pix shift in x. I think steps slipped on move towards 0, so 
-#   am adding an offset.
-#
-#xPixToStep = np.polynomial.Polynomial.fit(xscaleData.xpix, xscaleData.xstep, 2)
-#yPixToStep = np.polynomial.Polynomial.fit(yscaleData.ypix, yscaleData.ystep, 2)
-#xStepToPix = np.polynomial.Polynomial.fit(xscaleData.xstep, xscaleData.xpix, 2)
-#yStepToPix = np.polynomial.Polynomial.fit(yscaleData.ystep, yscaleData.ypix, 2)
 
 class NirIlluminator(object):
     def __init__(self, forceLedOff=True, logLevel=logging.INFO):
@@ -88,18 +64,18 @@ class NirIlluminator(object):
 
         self.preloadDistance = 200
         self.motorSlips = (0, 0)
-        
+
         if forceLedOff:
             self.ledsOff()
-        
+
     def __str__(self):
         return f"Meade(led={self._led}@{self._ledPower}, steps={self.getSteps()}, pix={self.getPix()})"
     def __repr__(self):
         return self.__str__()
-    
+
     def _cmd(self, cmdStr, debug=False, maxTime=5.0):
         """ Send a single motor command.
-        
+
         Args
         ----
         cmdStr : str
@@ -109,12 +85,12 @@ class NirIlluminator(object):
         """
         ip = '192.168.1.12'
         port = 9999
-        
+
         if debug:
             logFunc = self.logger.warning
         else:
             logFunc = self.logger.debug
-            
+
         cmdStr = cmdStr + '\n'
         replyBuffer = ""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -135,19 +111,19 @@ class NirIlluminator(object):
                     self.logger.fatal(f"reply timeed out after {t1-t0} seconds")
                     break
                 time.sleep(0.1)
-                    
+
         if 'BAD' in replyBuffer:
             raise RuntimeError(f"received unknown crap: {replyBuffer}")
         if not replyBuffer.endswith('OK'):
             raise RuntimeError(f"received unknown crud: {replyBuffer}")
-            
+
         parts = replyBuffer.split('\n')
         return parts[0]
 
     @property
     def dutyCycle(self):
         return self._ledPower
-        
+
     def ledState(self):
         if self._ledChangeTime is None:
             dt = None
@@ -160,39 +136,39 @@ class NirIlluminator(object):
 
         if led is None:
             led = self._led
- 
+
         return self.leds.position[led]
- 
+
     def ledFocusOffset(self, y, led=None):
         # Ignores Y, which is wrong -- CPL
 
         if led is None:
             led = self._led
- 
+
         return self.leds.loc[led]['focusOffset']
 
     def ledOffTime(self):
         _led, _ledPower, dt = self.ledState()
-        
+
         if _ledPower != 0:
             return 0
         else:
             return dt
-        
+
     def ledsOff(self):
         for w in self.leds.wave:
             self._cmd(f'led {w} 0')
         self._led = 0
         self._ledPower = 0
         self._ledChangeTime = time.time()
-        
+
     def led(self, wavelength, dutyCycle=None):
         wavelength = int(wavelength)
         if wavelength not in self.leds.wave.values:
             raise ValueError(f"wavelength ({wavelength}) not in {self.leds.wave.to_list()}")
         if dutyCycle is None:
             dutyCycle = self.leds.dutyCycle[wavelength]
-            
+
         if dutyCycle < 0 or dutyCycle > 100:    
             raise ValueError(f"dutyCycle ({dutyCycle}) not in 0..100")
         dutyCycle = int(dutyCycle)
@@ -425,6 +401,8 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     return xreps, yreps
 
 def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
+    """Acquire dithered imaged at a given position. """
+
     if npos%2 != 1:
         raise ValueError("not willing to deal with non-odd dithering")
     rad = npos//2
@@ -441,21 +419,98 @@ def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
 
     return pd.concat(visits, ignore_index=True)
 
+def createDither(frames, hxCalib, rad=15, doNorm=True):
+
+    scale = 3
+    ctrIdx = (scale*scale+1)//2
+    xsteps = frames['xstep'].unique()
+    ysteps = frames['ystep'].unique()
+    
+    xoffsets = {xs:xi for xi,xs in enumerate(xsteps)}
+    yoffsets = {ys:(scale-1)-yi for yi,ys in enumerate(ysteps)}
+    # Need better sanity checks
+    if len(frames) != scale*scale or len(xsteps) != scale or len(ysteps) != scale:
+        raise ValueError("only want to deal with 3x3 dithers")
+
+    ctr = np.round(frames[['xpix','ypix']].values[ctrIdx]).astype('i4')
+    xslice = slice(ctr[0]-rad, ctr[0]+rad)
+    yslice = slice(ctr[1]-rad, ctr[1]+rad)
+
+    outIm = np.zeros((rad*2*scale, rad*2*scale), dtype='f4')
+    bkgndMask = np.ones((rad*2, rad*2), dtype='f4')
+    bkgndMask[rad-10:rad+11, rad-10:rad+11] = 0
+    maskIm = hxCalib.badMask[yslice,xslice]
+    bkgndMask *= 1-maskIm
+    print(f"{bkgndMask.sum()}/{bkgndMask.size}")
+    outIms = []
+    for f_i, fIdx in enumerate(frames.index):
+        f1 = frames.loc[fIdx]
+        im = hxCalib.isr(f1.visit)
+        im = im[yslice,xslice].astype('f4')
+        maskedIm = im*bkgndMask
+        bkgnd = np.median(maskedIm)
+        im -= bkgnd
+        maskedIm = im*bkgndMask
+
+        if f_i == 0:
+            normSum = np.sum(maskedIm, dtype='f8')
+        imSum = np.sum(maskedIm, dtype='f8')
+        if doNorm:
+            im *= (normSum/imSum).astype('f4')
+        xoff = xoffsets[f1.xstep]
+        yoff = yoffsets[f1.ystep]
+        print(f'{f1.visit:0.0f}: wave: {f1.wavelength} focus: {f1.focus} '
+              f'pix: {xoff} {yoff} step: {f1.xstep:0.0f},{f1.ystep:0.0f} '
+              f'ctr: {f1.xpix:0.2f},{f1.ypix:0.2f} bkgnd: {bkgnd:0.3f} '
+              f'scale: {normSum:0.1f}/{imSum:0.1f}={normSum/imSum:0.3f}')
+        outIm[yoff::scale, xoff::scale] = im
+        outIms.append(im)
+
+    return outIm, outIms
+
+def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=True):
+    dithers = []
+    for i in range(len(frames)//9):
+        dithFrames = frames.iloc[i*9:(i+1)*9]
+        print(len(dithFrames))
+        dith1, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm)
+        dithers.append(dith1)
+
+        if butler is not None:
+            row = dithFrames.iloc[0]
+            path = butler.get('dither', 
+                              idDict=dict(visit=int(row.visit),
+                                          wave=int(row.wavelength),
+                                          focus=row.focus,
+                                          row=(np.round(row.ypix/100)*100)))
+            hdr = [dict(name='VISIT', value=int(row.visit), comment="visit of 0,0 image"),
+                   dict(name='WAVE', value=row.wavelength),                   
+                   dict(name='FOCUS', value=row.focus),
+                   dict(name='XPIX', value=row.xpix, comment="measured xc of 0,0 image"),
+                   dict(name='YPIX', value=row.ypix, comment="measured yc of 0,0 image"),
+                   dict(name='XSTEP', value=row.xstep),
+                   dict(name='YSTEP', value=row.ystep),
+                   dict(name='SIZE', value=row.size, comment="measured RMS of 0,0 image"),
+                   dict(name='FLUX', value=row.flux, comment="measured total flux of 0,0 image"),
+                   dict(name='PEAK', value=row.peak, comment="measured peak of 0,0 image")]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fitsio.write(path, dith1, header=hdr, clobber=True)
+
 def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
               nramps=3):
     if waves is None:
         waves = meade.leds.wave
     if np.isscalar(waves):
         waves = [waves]
-        
+
     if np.isscalar(rows):
         rows = [rows]
     rows = np.array(rows, dtype='f4')
-    
+
     if np.isscalar(focus):
         focus = [focus]
     focus = np.array(focus, dtype='f4')
-    
+
     ditherList = []
     try:
         for w_i, w in enumerate(waves):
@@ -474,7 +529,7 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
                     ret['wavelength'] = w
                     ret['dutyCycle'] = dutyCycle
                     ditherList.append(ret)
-                    
+
                     print("ditherList: ", ditherList)
                     rowFrame =  pd.concat(ditherList, ignore_index=True)
                     if butler is not None:
