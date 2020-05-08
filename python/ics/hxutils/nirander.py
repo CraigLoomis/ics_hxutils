@@ -63,18 +63,18 @@ class NirIlluminator(object):
 
         self.preloadDistance = 200
         self.motorSlips = (0, 0)
-        
+
         if forceLedOff:
             self.ledsOff()
-        
+
     def __str__(self):
         return f"Meade(led={self._led}@{self._ledPower}, steps={self.getSteps()}, pix={self.getPix()})"
     def __repr__(self):
         return self.__str__()
-    
+
     def _cmd(self, cmdStr, debug=False, maxTime=5.0):
         """ Send a single motor command.
-        
+
         Args
         ----
         cmdStr : str
@@ -84,12 +84,12 @@ class NirIlluminator(object):
         """
         ip = '192.168.1.12'
         port = 9999
-        
+
         if debug:
             logFunc = self.logger.warning
         else:
             logFunc = self.logger.debug
-            
+
         cmdStr = cmdStr + '\n'
         replyBuffer = ""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -110,19 +110,19 @@ class NirIlluminator(object):
                     self.logger.fatal(f"reply timeed out after {t1-t0} seconds")
                     break
                 time.sleep(0.1)
-                    
+
         if 'BAD' in replyBuffer:
             raise RuntimeError(f"received unknown crap: {replyBuffer}")
         if not replyBuffer.endswith('OK'):
             raise RuntimeError(f"received unknown crud: {replyBuffer}")
-            
+
         parts = replyBuffer.split('\n')
         return parts[0]
 
     @property
     def dutyCycle(self):
         return self._ledPower
-        
+
     def ledState(self):
         if self._ledChangeTime is None:
             dt = None
@@ -135,39 +135,39 @@ class NirIlluminator(object):
 
         if led is None:
             led = self._led
- 
+
         return self.leds.position[led]
- 
+
     def ledFocusOffset(self, y, led=None):
         # Ignores Y, which is wrong -- CPL
 
         if led is None:
             led = self._led
- 
+
         return self.leds.loc[led]['focusOffset']
 
     def ledOffTime(self):
         _led, _ledPower, dt = self.ledState()
-        
+
         if _ledPower != 0:
             return 0
         else:
             return dt
-        
+
     def ledsOff(self):
         for w in self.leds.wave:
             self._cmd(f'led {w} 0')
         self._led = 0
         self._ledPower = 0
         self._ledChangeTime = time.time()
-        
+
     def led(self, wavelength, dutyCycle=None):
         wavelength = int(wavelength)
         if wavelength not in self.leds.wave.values:
             raise ValueError(f"wavelength ({wavelength}) not in {self.leds.wave.to_list()}")
         if dutyCycle is None:
             dutyCycle = self.leds.dutyCycle[wavelength]
-            
+
         if dutyCycle < 0 or dutyCycle > 100:    
             raise ValueError(f"dutyCycle ({dutyCycle}) not in 0..100")
         dutyCycle = int(dutyCycle)
