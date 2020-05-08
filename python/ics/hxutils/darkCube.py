@@ -3,7 +3,7 @@ from importlib import reload
 import numpy as np
 import fitsio
 
-import hxstack as hx
+from . import hxstack as hx
 reload(hx)
 
 class DarkCube(object):

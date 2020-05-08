@@ -15,10 +15,10 @@ from scipy.spatial.distance import cdist
 from pfs.utils import butler as pfsButler
 from pfs.utils import spectroIds as pfsSpectroIds
 
-import butlerMaps
-import darkCube
-import hxstack as hx
-import pfsutils
+from . import butlerMaps
+from . import darkCube
+from . import hxstack as hx
+from . import pfsutils
 
 reload(pfsButler)
 reload(pfsSpectroIds)
@@ -40,36 +40,11 @@ scaleDtype = np.dtype([('index', '<i4'),
                        ('xpix', '<f4'), 
                        ('ypix', '<f4')])
 
-order3step2pix = np.array([[ 4.38039071e+03, -7.82284603e-02, -1.11148770e-02,  5.76926023e-08,
-                             3.53393394e-07,  1.73296002e-07, -6.55858933e-13, -4.37487327e-14,  
-                            -4.63835782e-12, -3.51730829e-13],
-                           [-7.05568271e+02,  1.60644684e-03,  2.01131449e-01, -2.27164048e-08,  
-                            -9.69930392e-08, -7.03526714e-07, -3.82734519e-14,  1.62895921e-12,
-                             1.27740281e-13,  9.21832302e-12]])
-order3pix2step = np.array([[ 5.72137472e+04, -1.29699429e+01, 5.80691254e-01, -1.42934939e-04,
-                            -2.90384834e-04, -3.06205528e-05, 2.23651384e-08, -5.34768907e-10,
-                             1.91632524e-08, -1.92505185e-10],
-                           [ 3.50501058e+03, -7.69615008e-02,  5.08201497e+00,  2.26528896e-05,
-                             3.62525151e-05,  8.70551365e-05, -5.28844829e-10, -8.42873071e-09,
-                             1.42822503e-10, -6.74237602e-09]])
-
-stepToPix = skimage.transform.PolynomialTransform(order3step2pix)
-pixToStep = skimage.transform.PolynomialTransform(order3pix2step)
-
 projectionCoeffs = np.array([[-7.29713459e-02,  5.03186582e-03,  4.18365204e+03],
                              [ 2.08787075e-04,  1.91548157e-01, -6.78352586e+02],
                              [ 2.37363712e-08,  2.42779233e-06,  9.64776455e-01]])
 stepToPix = skimage.transform.ProjectiveTransform(projectionCoeffs)
 pixToStep = stepToPix.inverse
-
-# Forward and reverse maps. Assumed basically orthogonal nd quardratic
-# Have seen ~10-pix shift in x. I think steps slipped on move towards 0, so 
-#   am adding an offset.
-#
-#xPixToStep = np.polynomial.Polynomial.fit(xscaleData.xpix, xscaleData.xstep, 2)
-#yPixToStep = np.polynomial.Polynomial.fit(yscaleData.ypix, yscaleData.ystep, 2)
-#xStepToPix = np.polynomial.Polynomial.fit(xscaleData.xstep, xscaleData.xpix, 2)
-#yStepToPix = np.polynomial.Polynomial.fit(yscaleData.ystep, yscaleData.ypix, 2)
 
 class NirIlluminator(object):
     def __init__(self, forceLedOff=True, logLevel=logging.INFO):
