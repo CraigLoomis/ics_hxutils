@@ -400,25 +400,6 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     
     return xreps, yreps
 
-def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
-    """Acquire dithered imaged at a given position. """
-
-    if npos%2 != 1:
-        raise ValueError("not willing to deal with non-odd dithering")
-    rad = npos//2
-    xc, yc = meade.pixToSteps([meade.leds.position[led], row])
-    x0, y0 = xc-(rad*xsteps), yc-(rad*ysteps)
-    
-    xx = x0 + np.arange(npos)*xsteps
-    yy = y0 + np.arange(npos)*ysteps
-
-    visits = []
-    for r_i in range(nramps):
-        gridVisits = motorScan(meade, xx, yy, led=led, posInPixels=False)
-        visits.extend(gridVisits)
-
-    return pd.concat(visits, ignore_index=True)
-
 def createDither(frames, hxCalib, rad=15, doNorm=True):
 
     scale = 3
@@ -496,8 +477,27 @@ def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=True):
             path.parent.mkdir(parents=True, exist_ok=True)
             fitsio.write(path, dith1, header=hdr, clobber=True)
 
+def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
+    """Acquire dithered imaged at a given position. """
+
+    if npos%2 != 1:
+        raise ValueError("not willing to deal with non-odd dithering")
+    rad = npos//2
+    xc, yc = meade.pixToSteps([meade.leds.position[led], row])
+    x0, y0 = xc-(rad*xsteps), yc-(rad*ysteps)
+    
+    xx = x0 + np.arange(npos)*xsteps
+    yy = y0 + np.arange(npos)*ysteps
+
+    visits = []
+    for r_i in range(nramps):
+        gridVisits = motorScan(meade, xx, yy, led=led, posInPixels=False)
+        visits.extend(gridVisits)
+
+    return pd.concat(visits, ignore_index=True)
+
 def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
-              nramps=3):
+              nramps=3, takeDarks=True):
     if waves is None:
         waves = meade.leds.wave
     if np.isscalar(waves):
@@ -514,9 +514,16 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
     ditherList = []
     try:
         for w_i, w in enumerate(waves):
-            meade.led(w)
-            led, dutyCycle, _ = meade.ledState()
             for r_i, row in enumerate(rows):
+                if takeDarks:
+                    meade.ledsOff()
+                    xc, yc = meade.pixToSteps([meade.leds.position[w], row])
+                    meade.moveTo(xc, yc, preload=True)
+                    # Take and save a fresh dark
+                    dark = takeSuperDark(meade, force=True, nread=3, nexp=5)
+                    nirButler.put(dark, 'dark', dict(visit=dark.visit0))
+                meade.led(w)
+                led, dutyCycle, _ = meade.ledState()
                 for f_i, f in enumerate(focus):
                     print(f"led {w} on row {row} with focus {f}")
                     pfsutils.oneCmd('xcu_n1', f'motors move piston={f} abs microns')
@@ -530,7 +537,7 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
                     ret['dutyCycle'] = dutyCycle
                     ditherList.append(ret)
 
-                    print("ditherList: ", ditherList)
+                    print("ditherList: ", len(ditherList))
                     rowFrame =  pd.concat(ditherList, ignore_index=True)
                     if butler is not None:
                         outFileName = butler.get('measures', idDict=dict(visit=rowFrame.visit.min()))
