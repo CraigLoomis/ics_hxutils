@@ -50,9 +50,10 @@ class DarkCube(object):
         ff = fitsio.FITS(path, mode='r')
         hdr = ff[0].read_header()
         visits = [int(v) for v in hdr['VISITS'].split()]
+        nread = hdr['NREAD']
         
         cds = []
-        for i in range(len(visits)):
+        for i in range(nread):
             cds.append(ff[i+1].read())
         cube = np.stack(cds)
 
