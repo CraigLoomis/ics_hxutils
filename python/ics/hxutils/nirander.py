@@ -400,7 +400,7 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     
     return xreps, yreps
 
-def createDither(frames, hxCalib, rad=15, doNorm=True):
+def createDither(frames, hxCalib, rad=15, doNorm=False):
 
     scale = 3
     ctrIdx = (scale*scale+1)//2
@@ -426,10 +426,10 @@ def createDither(frames, hxCalib, rad=15, doNorm=True):
     outIms = []
     for f_i, fIdx in enumerate(frames.index):
         f1 = frames.loc[fIdx]
-        im = hxCalib.isr(f1.visit)
+        im = hxCalib.isr(int(f1.visit))
         im = im[yslice,xslice].astype('f4')
         maskedIm = im*bkgndMask
-        bkgnd = np.median(maskedIm)
+        bkgnd = np.median(maskedIm[np.where(maskedIm>0)])
         im -= bkgnd
         maskedIm = im*bkgndMask
 
@@ -449,7 +449,7 @@ def createDither(frames, hxCalib, rad=15, doNorm=True):
 
     return outIm, outIms
 
-def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=True):
+def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False):
     dithers = []
     for i in range(len(frames)//9):
         dithFrames = frames.iloc[i*9:(i+1)*9]
