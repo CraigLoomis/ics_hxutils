@@ -10,7 +10,7 @@ import fitsio
 
 logger = logging.getLogger('hxstack')
 
-rootDir = "/data/pfsx"
+rootDir = "/data/pfsx/raw"
 calibDir = "/data/pfsx/calib"
 sitePrefix = "PFJB"
 nightPattern = '20[12][0-9]-[01][0-9]-[0-3][0-9]'
@@ -20,15 +20,19 @@ class HxCalib(object):
         self.cam = cam
         self.badMask = badMask
         self.darkStack = darkStack
-        
-    def isr(self, visit, matchLevel=False, scaleLevel=False):
-        path = rampPath(visit, cam=self.cam)
-        _ramp = ramp(path)
-        
-        nreads = rampNreads(_ramp)
-        cds = rampCds(_ramp)
+
+    def isr(self, visit, matchLevel=False, scaleLevel=False, aOK=True):
+        if aOK:
+            # path = rampPath(visit, cam=self.cam, aOK=aOK)
+            cds, nreads = aramp(visit, cam=self.cam)
+        else:
+            path = rampPath(visit, cam=self.cam, aOK=False)
+            _ramp = ramp(path)
+
+            nreads = rampNreads(_ramp)
+            cds = rampCds(_ramp)
         dark = self.darkStack[nreads-1]
-        
+
         if matchLevel or scaleLevel:
             cdsMed = np.median(cds)
             darkMed = np.median(dark)
@@ -114,28 +118,61 @@ def rampPath(visit=-1, cam=None, prefix=None):
 def lastRamp(prefix=None, cam=None):
     return rampPath(visit=-1, cam=cam, prefix=prefix)
 
-def ramp(rampId, cam=None):
+class HxRamp(object):
+    def __init__(self, rampId, cam=None, aOK=True):
+        """Given any sane id, load a FITS ramp.
+
+        Args:
+        rampId : int, or path, or ramp
+        If already a ramp, return it.
+        If a path, open and return the ramp
+        If an int, treat as a visit, and resolve to a path using the cam.
+
+        Returns:
+        ramp : a fitsio FITS object
+        """
+
+        if isinstance(rampId, (int, np.integer)):
+            pathOrFits = rampPath(rampId, cam=cam, aOK=aOK)
+        else:
+            pathOrFits = rampId
+
+        if isinstance(pathOrFits, (str, pathlib.Path)):
+            self.ramp = fitsio.FITS(pathOrFits)
+        else:
+            self.ramp = pathOrFits
+
+    def cds(self, r0=0, r1=-1):
+        pass
+
+def ramp(rampId, cam=None, prefix=None):
     """Given any sane id, return a FITS ramp.
-    
+
     Args:
     rampId : int, or path, or ramp
       If already a ramp, return it.
       If a path, open and return the ramp
       If an int, treat as a visit, and resolve to a path using the cam.
-      
+
     Returns:
     ramp : a fitsio FITS object
     """
-    
+
     if isinstance(rampId, (int, np.integer)):
-        pathOrFits = rampPath(rampId, cam=cam)
+        pathOrFits = rampPath(rampId, cam=cam, prefix=prefix)
     else:
         pathOrFits = rampId
-        
+
     if isinstance(pathOrFits, (str, pathlib.Path)):
         return fitsio.FITS(pathOrFits)
     else:
         return pathOrFits
+
+def aramp(rampId, cam=None):
+    _rampFits = ramp(rampId, cam=cam, prefix='PFJA')
+    hdr = _rampFits[0].read_header()
+    nreads = hdr['W_HNREAD']
+    return _rampFits[-1].read(), nreads
 
 def rampStep(pathOrFits, r0=0, r1=-1, call=None, 
              singleReads=None, doCorrect=True):
