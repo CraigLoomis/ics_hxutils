@@ -17,7 +17,7 @@ def camFromPath(fname):
     return 'n' + p.stem[-2]
 
 def regStats(fpath, slices=None, r0=0, r1=-1, fitr0=1, fitr1=-1, doDiffs=False, 
-             order=1, preampGain=None):
+             residMax=-1, order=1, preampGain=None):
     
     ff = hx.ramp(fpath)
     nreads = hx.rampNreads(ff)
@@ -74,9 +74,16 @@ def regStats(fpath, slices=None, r0=0, r1=-1, fitr0=1, fitr1=-1, doDiffs=False,
     # print(len(meds), len(fitX), len(fitY))
     
     p1.plot(plotX, meds - coeffs[-1], '+-')
-    p1.plot(fitX, line(fitX) - coeffs[-1], label=label)
-    p2.plot(fitX, fitY - line(fitX), label='residuals')
-    p2.hlines(0,fitX[0],fitX[-1],colors='r',alpha=0.3)
+    p1.plot(plotX, line(plotX) - coeffs[-1], ':', color='red', label=label)
+    p1.plot(fitX, line(fitX) - coeffs[-1], color='red')
+
+    residX = plotX
+    residY = meds
+    if residMax is not None:
+        residX = plotX[:residMax]
+        residY = meds[:residMax]
+    p2.plot(residX, residY - line(residX), label='residuals')
+    p2.hlines(0,fitX[0],fitX[-1],colors='r',alpha=0.5)
     title = "%s\nx=[%d,%d] y=[%d,%d]  nreads=%d %0.2f $e^-/ADU$ preampGain=%0.2f readTime=%0.2f" % (os.path.basename(fpath), 
                                                                                                     slices[1].start,
                                                                                                     slices[1].stop-1, 
@@ -85,6 +92,10 @@ def regStats(fpath, slices=None, r0=0, r1=-1, fitr0=1, fitr1=-1, doDiffs=False,
                                                                                                     nreads, adcGain,
                                                                                                     preampGain, readTime)
     p1.set_title(title)
+    p1.grid(which='major', axis='both', alpha=0.5)
+    p1.grid(which='minor', axis='y', alpha=0.25)
+    p2.grid(which='major', axis='both', alpha=0.5)
+    p2.grid(which='minor', axis='y', alpha=0.25)
     p1.legend(loc='lower right', fontsize='small')
     p2.legend(loc='lower right', fontsize='small')
     
