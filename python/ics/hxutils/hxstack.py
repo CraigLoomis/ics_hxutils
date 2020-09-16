@@ -376,7 +376,7 @@ def refSplit(im, evenOdd=True):
 def ampSlices(im, ampN, nAmps=32):
     height, width = im.shape
     ampWidth = width//nAmps
-    slices = slice(height), slice(ampN*ampWidth, (ampN+1)*ampWidth+1)
+    slices = slice(height), slice(ampN*ampWidth, (ampN+1)*ampWidth)
 
     return slices
 
