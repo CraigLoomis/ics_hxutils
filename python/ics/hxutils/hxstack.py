@@ -646,3 +646,28 @@ def cdsNoise(ramp, r0=1, r1=2, doCorrect=False, rad=100, nSamples=1000):
     stds = np.array(stds)
     
     return np.median(mns), np.median(stds), mns, stds, dregs, sigs
+
+def pfsbToPfsa(bFiles):
+    for ramp_i, rampPath in enumerate(bFiles):
+        try:
+            thisRamp = ramp(rampPath)
+            nreads = len(thisRamp)-1
+            hdr = fitsio.read_header(rampPath)
+            try:
+                data_type = hdr['IMAGETYP']
+                hdr.add_record(dict(name='DATA-TYP', value=data_type, comment='Subaru-stype exposure type'))
+            except:
+                data_type = hdr['DATA-TYP']
+
+            
+            hdr.add_record(dict(name='W_HNREAD', value=nreads, comment='number of reads in ramp'))
+            cds = rampCds(thisRamp)
+            pathParts = list(rampPath.parts)
+            pathParts[-1] = 'PFJA' + pathParts[-1][4:]
+            newPath = pathlib.Path(*pathParts)
+            print(ramp_i, data_type, len(bFiles), newPath, nreads, len(hdr), cds.shape, cds.dtype)
+            assert cds.dtype == np.float32
+            fitsio.write(newPath, data=cds,extname='IMAGE',header=hdr,clobber=True)
+        except Exception as e:
+            print(f"skipping {rampPath}: {e}") 
+
