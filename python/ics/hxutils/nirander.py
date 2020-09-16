@@ -247,7 +247,7 @@ class NirIlluminator(object):
         if doY:
             self._cmd("home y", maxTime=100)
         return self.getSteps()
-        
+
 def takeSuperDark(meade, nexp=3, nread=3, force=False, cam='n1'):
     offtimeRequired = 3600
     offTime = meade.ledOffTime()
@@ -263,8 +263,8 @@ def takeSuperDark(meade, nexp=3, nread=3, force=False, cam='n1'):
     superDark = darkCube.DarkCube.createFromVisits(visits)
     return superDark
 
-def takeRamp(cam, nread):
-    pfsutils.oneCmd(f'hx_{cam}', f'ramp nread={nread}')
+def takeRamp(cam, nread, nreset=1, exptype="test", comment="", quiet=True):
+    pfsutils.oneCmd(f'hx_{cam}', f'ramp nread={nread} nreset={nreset} exptype={exptype} objname=\"{comment}\"', quiet=quiet)
     visit = hx.pathToVisit(hx.lastRamp(cam=cam))
     
     return visit
