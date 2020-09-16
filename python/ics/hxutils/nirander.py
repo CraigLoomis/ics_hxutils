@@ -48,28 +48,6 @@ stepToPix = skimage.transform.ProjectiveTransform(projectionCoeffs)
 pixToStep = stepToPix.inverse
 
 class NirIlluminator(object):
-    def __init__(self, forceLedOff=True, logLevel=logging.INFO):
-        self.logger = logging.getLogger('meade')
-        self.logger.setLevel(logLevel)
-        self._led = None
-        self._ledPower = None
-        self._ledChangeTime = None
-
-        # Ordered by increasing X _steps_, decreasing X _pixels_ (why did I say yes?!?)
-        self.leds = pd.DataFrame(dict(wave=[1300, 1200, 1085, 1070, 1050, 970, 930],
-                                      dutyCycle=[100.0, 33, 30, 33, 19, 83, 40],
-                                      focusOffset=[4.0, 0, 0, 0, 0, 0, -10.0],
-                                      position=[3984, 3664, 2700, 2457, 2274, 846, 100]))
-        self.leds = self.leds.set_index('wave', drop=False)
-
-        self.preloadDistance = 200
-        self.motorSlips = (0, 0)
-
-        if forceLedOff:
-            self.ledsOff()
-
-    def __str__(self):
-        return f"Meade(led={self._led}@{self._ledPower}, steps={self.getSteps()}, pix={self.getPix()})"
     def __repr__(self):
         return self.__str__()
 
@@ -83,7 +61,6 @@ class NirIlluminator(object):
             are checked against internal limit, so should always be used to 
             move.
         """
-        ip = '192.168.1.12'
         port = 9999
 
         if debug:
@@ -94,7 +71,7 @@ class NirIlluminator(object):
         cmdStr = cmdStr + '\n'
         replyBuffer = ""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((ip, port))
+            sock.connect((self.ip, port))
             logFunc(f'send: {cmdStr.strip()}')
             sock.sendall(bytes(cmdStr, "latin-1"))
 
@@ -131,22 +108,6 @@ class NirIlluminator(object):
             dt = time.time() - self._ledChangeTime
         return (self._led, self._ledPower, dt)
 
-    def ledPosition(self, y, led=None):
-        # Ignores Y, which is wrong -- CPL
-
-        if led is None:
-            led = self._led
-
-        return self.leds.position[led]
-
-    def ledFocusOffset(self, y, led=None):
-        # Ignores Y, which is wrong -- CPL
-
-        if led is None:
-            led = self._led
-
-        return self.leds.loc[led]['focusOffset']
-
     def ledOffTime(self):
         _led, _ledPower, dt = self.ledState()
 
@@ -155,15 +116,15 @@ class NirIlluminator(object):
         else:
             return dt
 
-    def ledsOff(self):
+    def ledsOff(self, debug=False):
         for w in self.leds.wave:
-            self._cmd(f'led {w} 0')
+            self._cmd(f'led {w} 0', debug=debug)
         self._led = 0
         self._ledPower = 0
         self._ledChangeTime = time.time()
 
     def led(self, wavelength, dutyCycle=None):
-        wavelength = int(wavelength)
+        # wavelength = int(wavelength)
         if wavelength not in self.leds.wave.values:
             raise ValueError(f"wavelength ({wavelength}) not in {self.leds.wave.to_list()}")
         if dutyCycle is None:
@@ -184,6 +145,76 @@ class NirIlluminator(object):
         
         self._cmd(f'led {self._led} {dutyCycle}', debug=True)
         
+class PlateIlluminator(NirIlluminator):
+    def __init__(self, forceLedOff=True, logLevel=logging.INFO, ip=None):
+
+        if ip is None:
+            ip = 'platepi'
+        self.ip = ip
+        
+        self.logger = logging.getLogger('plate')
+        self.logger.setLevel(logLevel)
+        self._led = None
+        self._ledPower = None
+        self._ledChangeTime = None
+
+        
+        # Ordered by increasing X _steps_, decreasing X _pixels_ (why did I say yes?!?)
+        self.leds = pd.DataFrame(dict(wave=['1070-0.75','1070-1','1070-1.5','1070-2','1070-2.7','1070-4'],
+                                      dutyCycle=[33, 33, 33, 33, 33, 33]))
+        self.leds = self.leds.set_index('wave', drop=False)
+
+        if forceLedOff:
+            self.ledsOff()
+
+    def __str__(self):
+        return f"PlateIlluminator(led={self._led}@{self._ledPower})"
+
+class GimbalIlluminator(NirIlluminator):
+    def __init__(self, forceLedOff=True, logLevel=logging.INFO, ip=None):
+
+        if ip is None:
+            ip = 'gimbalpi'
+        self.ip = ip
+        
+        self.logger = logging.getLogger('meade')
+        self.logger.setLevel(logLevel)
+        self._led = None
+        self._ledPower = None
+        self._ledChangeTime = None
+
+        # Ordered by increasing X _steps_, decreasing X _pixels_ (why did I say yes?!?)
+        self.leds = pd.DataFrame(dict(wave=[1300, 1200, 1085, 1070, 1050, 970, 930],
+                                      dutyCycle=[100.0, 33, 30, 33, 19, 83, 40],
+                                      focusOffset=[4.0, 0, 0, 0, 0, 0, -10.0],
+                                      position=[3984, 3664, 2700, 2457, 2274, 846, 100]))
+        self.leds = self.leds.set_index('wave', drop=False)
+
+        self.preloadDistance = 200
+        self.motorSlips = (0, 0)
+
+        if forceLedOff:
+            self.ledsOff()
+
+    def __str__(self):
+        return f"Meade(led={self._led}@{self._ledPower}, steps={self.getSteps()}, pix={self.getPix()})"
+
+    def ledPosition(self, y, led=None):
+        # Ignores Y, which is wrong -- CPL
+
+        if led is None:
+            led = self._led
+
+        return self.leds.position[led]
+
+    def ledFocusOffset(self, y, led=None):
+        # Ignores Y, which is wrong -- CPL
+
+        if led is None:
+            led = self._led
+
+        return self.leds.loc[led]['focusOffset']
+
     def stepsToPix(self, steps):
         steps = np.array(steps)
         upDim = steps.ndim < 2
