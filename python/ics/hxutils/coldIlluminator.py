@@ -1,0 +1,118 @@
+import logging
+
+import gpiozero
+
+class GpioBinarySelect(object):
+    def __init__(self, pins=None, values=None):
+        self.logger = logging.getLogger('select')
+        self.bits = []
+        self.map = values
+        self.invmap = {v:k for k,v in self.map.items()}
+        for p in pins:
+            self.bits.append(gpiozero.OutputDevice(p))
+
+    def __del__(self):
+        for p in self.bits:
+            p.close()
+            
+    def __str__(self):
+        return "BinarySelect(%d,%d)" % (self.bits[0].value,
+                                        self.bits[1].value)
+
+    def status(self):
+        bitMask = (self.bits[0].value == 1, self.bits[1].value == 1)
+        return self.invmap[bitMask]
+    
+    def setLed(self, led):
+        p1, p2 = self.map[led]
+        self.logger.info('setting lamp %s, bits=%d,%d', led, p1, p2)
+        self.bits[0].value = p1
+        self.bits[1].value = p2
+        
+class GpioLadder(object):
+    def __init__(self, pins=None):
+        self.logger = logging.getLogger('ladder')
+        self.bits = []
+        for p in pins:
+            self.bits.append(gpiozero.OutputDevice(p))
+
+    def __del__(self):
+        for p in self.bits:
+            p.close()
+            
+    def __str__(self):
+        val = self.status()
+        return "GpioLadder(value=%d, 0x%02x)" % (val, val)
+
+    def status(self):
+        val = 0
+        for b_i, b in enumerate(self.bits[::1]):
+            val += (1<<b_i) if b.value else 0
+
+        return val
+        
+    def setLevel(self, value):
+        if not isinstance(value, int) or value < 0 or (value > 2**(len(self.bits))-1):
+            raise ValueError('invalid level: %s' % (value))
+
+        self.logger.info('setting level=%d', value)
+        for i in range(len(self.bits)):
+            doSet = (value & 1<<i) > 0
+            self.logger.debug('setting %s bit to %d', self.bits[i], value)
+            self.bits[i].value = doSet
+            
+            
+class ColdIlluminator(object):
+    """Control the 4-LED controller on the n8 cryostat.
+
+    GPIO2 - LED power on
+    GPIO3,4,14,15,17,18,27,22,23,24 - bits 0..7 of the resistor ladder
+    GPIO26,20 - select single active LED from four.
+
+    """
+
+    def __init__(self, logLevel=logging.INFO):
+        self.logger = logging.getLogger('illuminator')
+        self.logger.setLevel(level=logLevel)
+
+        self.powerAll = gpiozero.OutputDevice(pin='GPIO2')
+        self.ledSelect = GpioBinarySelect(pins=['GPIO26', 'GPIO20'], 
+                                          values={1:(False, True),
+                                                  2:(False, False),
+                                                  3:(True, True),
+                                                  4:(True, False)})
+        self.ledPower = GpioLadder(['GPIO3', 'GPIO4',
+                                    'GPIO14', 'GPIO15',
+                                    'GPIO17', 'GPIO18',
+                                    'GPIO27', 'GPIO22',
+                                    'GPIO23', 'GPIO24'])
+        
+        self.led = None
+
+    def __del__(self):
+        self.powerAll.close()
+            
+    def __str__(self):
+        return "ColdIlluminator(power=%s, led=%s, level=%s)" % (self.powerAll.value,
+                                                               self.ledSelect,
+                                                               self.ledPower)
+
+    def status(self):
+        return (self.powerAll.value == 1,
+                self.ledSelect.status(),
+                self.ledPower.status())
+                
+    def setLED(self, ledNum, level):
+        if ledNum == 0 or level == 0:
+            self.powerAll.off()
+            self.ledPower.setLevel(0)
+        elif ledNum >= 1 and ledNum <= 4:
+            self.ledSelect.setLed(ledNum)
+            self.ledPower.setLevel(level)
+            self.powerAll.on()
+        else:
+            raise ValueError('ledNum must be 0 or 1..4, not %s' % (ledNum))
+
+        return self.status()
+
+
