@@ -1,3 +1,6 @@
+*~
+#*#
+
 *.pdf
 *.jpg
 *.jpeg
@@ -5,3 +8,7 @@
 *.fits
 
 /.ipynb_checkpoints
+
+*.pyc
+/.vscode
+
