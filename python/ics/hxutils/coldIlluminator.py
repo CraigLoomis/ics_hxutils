@@ -1,6 +1,10 @@
+import functools
+import itertools
 import logging
-
+logging.basicConfig(format='%(asctime)s %(name)s  %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO)
 import gpiozero
+import trio
 
 class GpioBinarySelect(object):
     def __init__(self, pins=None, values=None):
@@ -98,7 +102,7 @@ class ColdIlluminator(object):
                                                                self.ledPower)
 
     def status(self):
-        return (self.powerAll.value == 1,
+        return (int(self.powerAll.value == 1),
                 self.ledSelect.status(),
                 self.ledPower.status())
                 
@@ -115,4 +119,64 @@ class ColdIlluminator(object):
 
         return self.status()
 
+async def reply(stream, status, text=''):
+    reply = "{} {}\n".format(status, text).encode('latin-1')
+    await stream.send_all(reply)
+    
+async def cmdServer(stream, illuminator=None, connectionIds=None):
+    logger = logging.getLogger('ledServer')
+    logger.setLevel(logging.INFO)
+    thisId =  next(connectionIds)
+    
+    logger.info("led_server {} started".format(thisId))
+    try:
+        async for data in stream:
+            logger.info("led_server {}: received data {!r}".format(thisId, data))
+            try:
+                data = data.decode('latin-1').strip()
+                if data == 'off':
+                    ledNum = None
+                    ledLevel = 0
+                elif data == 'status':
+                    ret = illuminator.status()
+                    await reply(stream, 'OK', ' '.join([str(x) for x in ret]))
+                    continue            
+                elif data.startswith('on'):
+                    parts = data.split()
+                    if len(parts) != 3:
+                        await reply(stream, 'ERROR', 'on ledNum ledLevel')
+                        continue
+                    try:
+                        ledNum = int(parts[1], base=10)
+                        ledLevel = int(parts[2], base=10)
+                    except ValueError as e:
+                        await reply(stream, 'ERROR', e)
+                        continue
+                else:
+                    await reply(stream, 'ERROR', 'unknown command: {}'.format(data))
+                    continue
+            except Exception as e:
+                await reply(stream, 'ERROR', e)
+                continue
+                
+            ret = illuminator.setLED(ledNum, ledLevel)
+            await reply(stream, 'OK', ' '.join([str(x) for x in ret]))
 
+        logger.info("led_server {}: connection closed".format(thisId))
+    # FIXME: add discussion of MultiErrors to the tutorial, and use
+    # MultiError.catch here. (Not important in this case, but important if the
+    # server code uses nurseries internally.)
+    except Exception as exc:
+        # Unhandled exceptions will propagate into our parent and take
+        # down the whole program. If the exception is KeyboardInterrupt,
+        # that's what we want, but otherwise maybe not...
+        logger.error("led_server {}: crashed: {!r}".format(thisId, exc))
+
+async def main():
+    connectionIds = itertools.count()
+    leds = ColdIlluminator()
+    server = functools.partial(cmdServer, illuminator=leds, connectionIds=connectionIds)
+    await trio.serve_tcp(server, 6563)
+    
+if __name__ == "__main__":
+    trio.run(main)
