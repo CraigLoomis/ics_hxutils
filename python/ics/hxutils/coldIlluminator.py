@@ -98,8 +98,8 @@ class ColdIlluminator(object):
             
     def __str__(self):
         return "ColdIlluminator(power=%s, led=%s, level=%s)" % (self.powerAll.value,
-                                                               self.ledSelect,
-                                                               self.ledPower)
+                                                                self.ledSelect,
+                                                                self.ledPower)
 
     def status(self):
         return (int(self.powerAll.value == 1),
@@ -109,6 +109,7 @@ class ColdIlluminator(object):
     def setLED(self, ledNum, level):
         if ledNum == 0 or level == 0:
             self.powerAll.off()
+            self.ledSelect.setLed(2)
             self.ledPower.setLevel(0)
         elif ledNum >= 1 and ledNum <= 4:
             self.ledSelect.setLed(ledNum)
