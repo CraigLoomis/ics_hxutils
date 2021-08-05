@@ -130,7 +130,7 @@ class HxRamp(object):
         n : `int`
           0-indexed read number
         raw : `bool`
-          If True, do not run process/interpolate the raw IRP image.
+          If True, do not process/interpolate the raw IRP image.
         refPix4 : `bool`
           If True, return the `refpix4` image, based on the border pixels.
           Very unlikely to be what you want.
@@ -157,7 +157,8 @@ class HxRamp(object):
             pass
         elif self.interleaveRatio != 1:
             irpImage0 = irpImage
-            irpImage = self.constructFullIrp(n, irpImage)
+            irpImage = constructFullIrp(irpImage, self.nchan,
+                                        refPix=self.interleaveOffset)
 
         if irpImage is None or irpImage.shape == (1,1):
             return np.uint16(0)
