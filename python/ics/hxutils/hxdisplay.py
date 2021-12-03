@@ -358,3 +358,241 @@ def focusOffsetPlot(meade, focusResults, visit=None):
     f.colorbar(val)
     f.suptitle(f'best focus, from visit={visit}')
     return f
+
+def dispVisits(disp, visits, r0=0, r1=-1, cam='n1', doClear=True):
+    if doClear:
+        disp.set('frame delete all')
+    disp.set('frame lock image')
+    disp.set('tile grid')
+    disp.set('tile yes')
+
+    if isinstance(visits, int):
+        visits = [visits]
+    for v in visits:
+        path = hx.rampPath(v, cam=cam)
+        cds = hxramp.HxRamp(path).cdsN(r0=r0, r1=r1)
+        disp.set('frame new')
+        disp.set_np2arr(cds)
+
+def dispRamp(ramp, disp, reads=None):
+    disp.set('frame delete all')
+    disp.set('frame lock image')
+    disp.set('tile grid')
+    disp.set('tile yes')
+
+    if reads is None:
+        reads = range(1, ramp.nreads)
+    for r in reads:
+        cds = ramp.cds(r1=r)
+        print(f'read r1={r} of {reads}: {cds.shape} {cds.dtype}')
+        disp.set('frame new')
+        disp.set_np2arr(cds)
+
+def dispCds(ramp, disp, doClear=True, doCorrect=True, r0=0, r1=-1):
+    d0 = ramp.readN(r0, doCorrect=doCorrect)
+    d1 = ramp.readN(r1, doCorrect=doCorrect)
+
+    if doClear:
+        disp.set('frame delete all')
+        disp.set('frame lock image')
+
+    disp.set('frame new')
+    disp.set_np2arr(d1-d0)
+
+def dispPairs(disp, d0, d1, d2):
+    disp.set('frame delete all')
+    disp.set('frame lock image')
+    disp.set('tile grid')
+    disp.set('tile yes')
+
+    disp.set('frame new')
+    disp.set_np2arr(d0)
+    disp.set('frame new')
+    disp.set_np2arr(d1)
+    disp.set('frame new')
+    disp.set_np2arr(d2)
+
+
+    disp.set('frame new')
+    disp.set_np2arr(d1.astype('f4') - d0)
+    disp.set('frame new')
+    disp.set_np2arr(d2.astype('f4') - d0)
+
+
+def dispData(ramp, disp, r0=0, r1=1, r2=2):
+    d0 = ramp.dataN(r0)
+    d1 = ramp.dataN(r1)
+    d2 = ramp.dataN(r2)
+
+    dispPairs(disp, d0, d1, d2)
+
+def dispIrp(ramp, disp, r0=0, r1=1, r2=2):
+    d0 = ramp.irpN(r0)
+    d1 = ramp.irpN(r1)
+    d2 = ramp.irpN(r2)
+
+    dispPairs(disp, d0, d1, d2)
+
+def dispIrpPanel(ramp, disp, r0=1, r1=-1):
+    """Display the components of a CDS.
+
+    Top row: the two Data images, and their diff.
+    Middle row: the two IRP images and their diff
+    Bottom row: the data-irp images for all three columns.
+
+    The LR image is the net IRP-corrected CDS image.
+    """
+
+    disp.set('frame delete all')
+    disp.set('frame lock image')
+    disp.set('tile grid')
+    disp.set('tile yes')
+    disp.set('scale zscale')
+    disp.set('scale linear')
+
+    d0 = ramp.dataN(r0)
+    d1 = ramp.dataN(r1)
+
+    i0 = ramp.irpN(r0)
+    i1 = ramp.irpN(r1)
+
+    r0 = ramp.readN(r0)
+    r1 = ramp.readN(r1)
+
+
+    disp.set('frame new')
+    disp.set_np2arr(d0)
+    disp.set('frame new')
+    disp.set_np2arr(d1)
+    disp.set('frame new')
+    dd = d1.astype('f4')-d0
+    disp.set_np2arr(dd)
+
+    disp.set('frame new')
+    disp.set_np2arr(i0)
+    disp.set('frame new')
+    disp.set_np2arr(i1)
+    disp.set('frame new')
+    di = i1.astype('f4')-i0
+    disp.set_np2arr(di)
+
+    disp.set('frame new')
+    disp.set_np2arr(r0)
+    disp.set('frame new')
+    disp.set_np2arr(r1)
+    disp.set('frame new')
+    dr = r1-r0
+    disp.set_np2arr(dr)
+
+    return dd, di, dr
+
+def dispDiff(ramp, disp, r0=0, r1=1, r2=2):
+    d0 = ramp.readN(r0)
+    d1 = ramp.readN(r1)
+    d2 = ramp.readN(r2)
+
+    dispPairs(disp, d0, d1, d2)
+
+def dispCdsRamp(ramp, disp, r0=1, r1=-1):
+    nums = range(ramp.nreads)
+    r0 = nums[r0]
+    r1 = nums[r1]
+
+    disp.set('frame delete all')
+    disp.set('frame lock image')
+    disp.set('tile grid')
+    disp.set('tile yes')
+
+    for r in range(r0+1, r1+1):
+        diffIm = ramp.cds(r0=r0, r1=r)
+        disp.set('frame new')
+        disp.set_np2arr(diffIm)
+
+    disp.set('scale zscale')
+
+def dispStackedVisits(disp, visits, cam, doClear=True, r0=0, r1=-1):
+    if doClear:
+        disp.set('frame delete all')
+        disp.set('frame lock image')
+        disp.set('tile grid')
+        disp.set('tile yes')
+
+    stackedImage = None
+    if isinstance(visits, int):
+        visits = [visits]
+    for v in visits:
+        path = hx.rampPath(v, cam=cam)
+        cds = hxramp.HxRamp(path).cdsN(r0=r0, r1=r1)
+        if stackedImage is None:
+            stackedImage = cds
+        else:
+            stackedImage += cds
+
+    disp.set('frame new')
+    disp.set_np2arr(stackedImage)
+
+def getPix(row, meade):
+    """For a reading get the center pixel. Use measurement is available, else the steps. """
+    try:
+        xpix, ypix = row['xpix'], row['ypix']
+        if np.isnan(xpix):
+            raise ValueError()
+    except:
+        xpix, ypix = meade.stepsToPix([row['xstep'], row['ystep']])
+
+    return xpix, ypix
+
+def dispMask(disp, alpha=0.5):
+    disp.set(f'mask transparency {alpha*100}')
+    disp.set(f'mask color red')
+    disp.set(f'mask mark nonzero')
+
+def setMask(disp, badMask, alpha=0.75):
+    disp.set('mask clear')
+    disp.set('array mask [dim=4096,bitpix=32]', badMask)
+    dispMask(disp, alpha=alpha)
+
+def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=None,
+              zoom=8, cam=None, lock=True, badMask=None):
+    """Show a grid of images centered on their spots."""
+
+    if tileGrid is not None:
+        nImages = tileGrid[0] * tileGrid[1]
+        maxRows = nImages
+
+    if len(df) > maxRows:
+        raise ValueError(f"too many rows ({len(df)} > {maxRows}) -- increase maxRows if you really want")
+
+    if doClear:
+        disp.set('frame delete all')
+        disp.set('tile grid')
+        disp.set('tile yes')
+        disp.set(f'zoom to {zoom}')
+
+    if tileGrid is not None:
+        disp.set(f'tile grid layout {tileGrid[1]} {tileGrid[1]}')
+        disp.set('tile grid direction y')
+
+    if lock:
+        disp.set('lock frame image')
+    else:
+        disp.set('lock frame none')
+
+    for i, row in df.iterrows():
+        disp.set('frame new')
+        ramp = hxramp.HxRamp(hxramp.rampPath(visit=row['visit'], cam=cam))
+        cds = ramp.cdsN(r1=r1)
+        cds -= np.median(cds)
+        disp.set_np2arr(cds)
+        if badMask is not None:
+            setMask(disp, badMask)
+        if not lock:
+            xpix, ypix = getPix(row, meade)
+            disp.set(f'pan to {xpix} {ypix} image')
+            logger.info(f'{row.wavelength} {xpix} {ypix}')
+
+    if lock: # Assume they are all at the same place
+        row = df.head(1).squeeze()
+        xpix, ypix = getPix(row, meade)
+        disp.set(f'pan to {xpix} {ypix} image')
+        disp.set('lock scalelimits; lock scale')
