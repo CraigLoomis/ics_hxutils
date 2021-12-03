@@ -1,4 +1,5 @@
 from importlib import reload
+import logging
 import os
 import pathlib
 
@@ -9,8 +10,14 @@ import sep
 
 from . import nirander
 from . import hxstack as hx
+from . import hxramp
+
 reload(hx)
+reload(hxramp)
 reload(nirander)
+
+logger = logging.getLogger('hxdisplay')
+logger.setLevel(logging.INFO)
 
 def camFromPath(fname):
     p = pathlib.Path(fname)

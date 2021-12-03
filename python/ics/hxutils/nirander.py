@@ -18,14 +18,14 @@ from pfs.utils import spectroIds as pfsSpectroIds
 
 from . import butlerMaps
 from . import darkCube
-from . import hxstack as hx
+from . import hxramp
 from . import pfsutils
 
 reload(pfsButler)
 reload(pfsSpectroIds)
 reload(butlerMaps)
 reload(darkCube)
-reload(hx)
+reload(hxramp)
 reload(pfsutils)
 
 specIds = pfsSpectroIds.SpectroIds(partName='n1')
@@ -759,6 +759,9 @@ def measureSet(scans, hxCalib, thresh=250, center=None, radius=100, skipDone=Fal
         [description]
     """
        
+    if hxCalib is None:
+        hxCalib = hxramp.HxCalib()
+
     for f in 'x2', 'y2', 'xpix', 'ypix', 'flux', 'peak', 'size':
         if f not in scans:
             scans[f] = np.nan
