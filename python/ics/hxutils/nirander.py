@@ -832,7 +832,46 @@ def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
             print(f"Failed to measure and go to best focus: {e}")
 
     return scanFrame
-            
+
+def basicDataFrame(meade, visits, focus=None):
+    scanFrame = pd.DataFrame(dict(visit=visits, focus=focus))
+
+    wavelength, dutyCycle, _ = meade.ledState()
+    xstep, ystep = meade.getSteps()
+
+    scanFrame['wavelength'] = wavelength
+    scanFrame['xstep'] = xstep
+    scanFrame['ystep'] = ystep
+    scanFrame['dutyCycle'] = dutyCycle
+
+    return scanFrame
+
+def focusSweep(meade, led=None, pix=None, centerFocus=None, spacing=10, r=5, measureCall=None):
+    """Setup the gimbal to the given pixel and led, and make a focus sweep """
+
+    doLedOff = led is not None
+
+    if led is not None:
+        meade.led(led)
+    wavelength, dutyCycle, _ = meade.ledState()
+
+    if pix is not None:
+        meade.moveToPix(*pix)
+    xpix, ypix = meade.getPix()
+    xstep, ystep = meade.getSteps()
+
+    focusScan = scanForFocus(centerFocus, spacing=spacing, r=r,
+                             measureCall=measureCall)
+
+    if doLedOff:
+        meade.ledsOff()
+
+    focusScan['wavelength'] = wavelength
+    focusScan['xstep'] = xstep
+    focusScan['ystep'] = ystep
+    focusScan['dutyCycle'] = dutyCycle
+
+    return focusScan
 
 def scanForFocus(center, spacing=5, r=4, measureCall=None):
     return _scanForFocus(center, spacing=spacing, r=r, measureCall=measureCall)
@@ -901,3 +940,67 @@ def measureSet(scans, hxCalib, thresh=250, center=None, radius=100, skipDone=Fal
             scans.loc[scan_i, 'peak'] = bestSpot.peak
     
     return scans
+
+def spotGrid(meade, butler, focus, waves=None, rows=None):
+    """Take a single image at a single focus at a grid of positions."""
+
+    if waves is None:
+        waves = meade.leds.wave
+    if np.isscalar(waves):
+        waves = [waves]
+
+    if np.isscalar(rows):
+        rows = [rows]
+    rows = np.array(rows, dtype='f4')
+
+    measRows = []
+    measFrame = []
+    try:
+        pfsutils.oneCmd('xcu_n1', f'motors move piston={focus} abs microns')
+        for w_i, w in enumerate(waves):
+            for r_i, row in enumerate(rows):
+                meade.led(w)
+                led, dutyCycle, _ = meade.ledState()
+                print(f"led {w} on row {row} with focus {focus}")
+                pos = meade.getTargetPosition(w, row)
+
+                meas = takeSpot(meade, pos=pos, comment=f'testGrid_{w}_{row}')
+                meas.loc[:, 'focus'] = focus
+                logger.info(f'new row: {meas}')
+                measRows.append(meas)
+                measFrame =  pd.concat(measRows, ignore_index=True)
+                logger.info(f'last row: {measFrame.iloc[-1]}')
+                if butler is not None:
+                    outFileName = butler.getPath('measures', idDict=dict(visit=measFrame.visit.min()))
+                    outFileName.parent.mkdir(mode=0o2775, parents=True, exist_ok=True)
+                    with open(outFileName, mode='w') as outf:
+                        outf.write(measFrame.to_string())
+                        print(f"wrote {len(measFrame)} lines to {outFileName} at led {w} "
+                              f"on row {row} with focus {focus}")
+    except Exception as e:
+        print(f'oops: {e}')
+        # breakpoint()
+        raise
+    finally:
+        meade.ledsOff()
+
+    return measFrame
+
+def takeSpot(meade, pos=None, focus=None, light=None, nread=3, comment=None):
+    if pos is not None:
+        meade.moveToPix(*pos)
+    if focus is not None:
+        pfsutils.oneCmd('xcu_n1', f'motors move piston={focus} abs microns')
+    if light is not None:
+        if len(light) == 1:
+            meade.led(light)
+        else:
+            meade.led(*light)
+    print(meade.ledState())
+    visit = takeRamp(cam='n1', nread=nread, exptype='object', comment=comment)
+
+    df = basicDataFrame(meade, visits=[visit], focus=focus)
+
+    if light is not None:
+        meade.ledsOff()
+    return df
