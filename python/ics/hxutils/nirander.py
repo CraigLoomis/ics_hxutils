@@ -61,17 +61,22 @@ scaleDtype = np.dtype([('index', '<i4'),
                        ('xpix', '<f4'), 
                        ('ypix', '<f4')])
 
-projectionCoeffs = np.array([[-7.29713459e-02,  5.03186582e-03,  4.18365204e+03],
-                             [ 2.08787075e-04,  1.91548157e-01, -6.78352586e+02],
-                             [ 2.37363712e-08,  2.42779233e-06,  9.64776455e-01]])
-stepToPix = skimage.transform.ProjectiveTransform(projectionCoeffs)
-pixToStep = stepToPix.inverse
+class AidenPi(object):
+    def __init__(self, name, host, port=9999, logLevel=logging.INFO):
+        """Command one of Aiden's pi programs. """
 
-class NirIlluminator(object):
+        self.host = host
+        self.port = port
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logLevel)
+
+    def __str__(self):
+        return f"AidenPi(name={self.name}, host={self.host}, port={self.port})"
+
     def __repr__(self):
         return self.__str__()
 
-    def _cmd(self, cmdStr, debug=False, maxTime=5.0):
+    def cmd(self, cmdStr, debug=False, maxTime=5.0):
         """ Send a single motor command.
 
         Args
@@ -81,8 +86,6 @@ class NirIlluminator(object):
             are checked against internal limit, so should always be used to 
             move.
         """
-        port = 9999
-
         if debug:
             logFunc = self.logger.warning
         else:
@@ -91,7 +94,7 @@ class NirIlluminator(object):
         cmdStr = cmdStr + '\n'
         replyBuffer = ""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((self.ip, port))
+            sock.connect((self.host, self.port))
             logFunc(f'send: {cmdStr.strip()}')
             sock.sendall(bytes(cmdStr, "latin-1"))
 
@@ -114,8 +117,31 @@ class NirIlluminator(object):
         if not replyBuffer.endswith('OK'):
             raise RuntimeError(f"received unknown crud: {replyBuffer}")
 
-        parts = replyBuffer.split('\n')
+        parts = replyBuffer.split(';')
         return parts[0]
+
+class PlateIlluminator:
+    def __init__(self, forceLedOff=True, logLevel=logging.INFO, ip=None):
+
+        if ip is None:
+            ip = 'platepi'
+        self.dev =  AidenPi('plate', ip, logLevel=logLevel)
+
+        self.logger = logging.getLogger('plate')
+        self.logger.setLevel(logLevel)
+        self._led = None
+        self._ledPower = None
+        self._ledChangeTime = None
+
+        self.leds = pd.DataFrame(dict(wave=['1070-0.75','1070-1','1070-1.5','1070-2','1070-2.7','1070-4'],
+                                      dutyCycle=[33, 33, 33, 33, 33, 33]))
+        self.leds = self.leds.set_index('wave', drop=False)
+
+        if forceLedOff:
+            self.ledsOff()
+
+    def __str__(self):
+        return f"PlateIlluminator(led={self._led}@{self._ledPower})"
 
     @property
     def dutyCycle(self):
@@ -138,7 +164,7 @@ class NirIlluminator(object):
 
     def ledsOff(self, debug=False):
         for w in self.leds.wave:
-            self._cmd(f'led {w} 0', debug=debug)
+            self.dev.cmd(f'led {w} 0', debug=debug)
         self._led = 0
         self._ledPower = 0
         self._ledChangeTime = time.time()
@@ -150,74 +176,133 @@ class NirIlluminator(object):
         if dutyCycle is None:
             dutyCycle = self.leds.dutyCycle[wavelength]
 
-        if dutyCycle < 0 or dutyCycle > 100:    
+        if dutyCycle < 0 or dutyCycle > 100:
             raise ValueError(f"dutyCycle ({dutyCycle}) not in 0..100")
         dutyCycle = int(dutyCycle)
 
         if self._led is None:
             raise RuntimeError("current state of LEDs is unknown: need to call .ledsOff() before turning a LED on.")
         if self._led in self.leds.wave and self._led != wavelength:
-            self._cmd(f'led {self._led} 0', debug=True)
+            self.dev.cmd(f'led {self._led} 0', debug=True)
             self._led = 0
         self._led = wavelength
         self._ledPower = dutyCycle
         self._ledChangeTime = time.time()
-        
-        self._cmd(f'led {self._led} {dutyCycle}', debug=True)
-        
-class PlateIlluminator(NirIlluminator):
-    def __init__(self, forceLedOff=True, logLevel=logging.INFO, ip=None):
 
-        if ip is None:
-            ip = 'platepi'
-        self.ip = ip
-        
-        self.logger = logging.getLogger('plate')
-        self.logger.setLevel(logLevel)
+        self.dev.cmd(f'led {self._led} {dutyCycle}', debug=True)
+
+class Illuminator:
+    def __init__(self):
         self._led = None
         self._ledPower = None
         self._ledChangeTime = None
-
-        
-        # Ordered by increasing X _steps_, decreasing X _pixels_ (why did I say yes?!?)
-        self.leds = pd.DataFrame(dict(wave=['1070-0.75','1070-1','1070-1.5','1070-2','1070-2.7','1070-4'],
-                                      dutyCycle=[33, 33, 33, 33, 33, 33]))
-        self.leds = self.leds.set_index('wave', drop=False)
-
-        if forceLedOff:
-            self.ledsOff()
 
     def __str__(self):
         return f"PlateIlluminator(led={self._led}@{self._ledPower})"
 
-class GimbalIlluminator(NirIlluminator):
-    def __init__(self, forceLedOff=True, logLevel=logging.INFO, ip=None):
+    @property
+    def dutyCycle(self):
+        return self._ledPower
 
+    def ledState(self):
+        if self._ledChangeTime is None:
+            dt = None
+        else:
+            dt = time.time() - self._ledChangeTime
+        return (self._led, self._ledPower, dt)
+
+    def ledOffTime(self):
+        _led, _ledPower, dt = self.ledState()
+
+        if _ledPower != 0:
+            return 0
+        else:
+            return dt
+
+    def ledsOff(self, debug=False):
+        for w in self.leds.wave:
+            self.dev.cmd(f'led {w} 0', debug=debug)
+        self._led = 0
+        self._ledPower = 0
+        self._ledChangeTime = time.time()
+
+    def led(self, wavelength, dutyCycle=None):
+        # wavelength = int(wavelength)
+        if wavelength not in self.leds.wave.values:
+            raise ValueError(f"wavelength ({wavelength}) not in {self.leds.wave.to_list()}")
+        if dutyCycle is None:
+            dutyCycle = self.leds.dutyCycle[wavelength]
+
+        if dutyCycle < 0 or dutyCycle > 100:
+            raise ValueError(f"dutyCycle ({dutyCycle}) not in 0..100")
+        dutyCycle = int(dutyCycle)
+
+        if self._led is None:
+            raise RuntimeError("current state of LEDs is unknown: need to call .ledsOff() before turning a LED on.")
+        if self._led in self.leds.wave and self._led != wavelength:
+            self.dev.cmd(f'led {self._led} 0', debug=True)
+            self._led = 0
+        self._led = wavelength
+        self._ledPower = dutyCycle
+        self._ledChangeTime = time.time()
+
+        self.dev.cmd(f'led {self._led} {dutyCycle}', debug=True)
+
+nudges = dict(n1=dict())
+
+class GimbalIlluminator(Illuminator):
+    def __init__(self, cam='n1', forceLedOff=True, logLevel=logging.INFO, ip=None):
+
+        Illuminator.__init__(self)
         if ip is None:
             ip = 'gimbalpi'
-        self.ip = ip
-        
+        self.dev =  AidenPi('gimbal', ip, logLevel=logLevel)
+
         self.logger = logging.getLogger('meade')
         self.logger.setLevel(logLevel)
-        self._led = None
-        self._ledPower = None
-        self._ledChangeTime = None
+
+        self._loadGeometry()
 
         # Ordered by increasing X _steps_, decreasing X _pixels_ (why did I say yes?!?)
+        # Swapped back 2021-09 because it was stupid.
         self.leds = pd.DataFrame(dict(wave=[1300, 1200, 1085, 1070, 1050, 970, 930],
                                       dutyCycle=[100.0, 33, 30, 33, 19, 83, 40],
                                       focusOffset=[4.0, 0, 0, 0, 0, 0, -10.0],
                                       position=[3984, 3664, 2700, 2457, 2274, 846, 100]))
-        self.leds = self.leds.set_index('wave', drop=False)
+        self.leds['position'] = 4096 - self.leds['position']
 
-        self.preloadDistance = 200
-        self.motorSlips = (0, 0)
+        self.leds = self.leds.set_index('wave', drop=False)
+        self.nudges = nudges[cam]
+
+        self.preloadDistance = 50
 
         if forceLedOff:
             self.ledsOff()
 
     def __str__(self):
         return f"Meade(led={self._led}@{self._ledPower}, steps={self.getSteps()}, pix={self.getPix()})"
+
+    def _loadGeometry(self):
+        # Measured after gimbal rebuild, on 2021-10-13
+        matrix = np.array([[ 7.31536530e-02,  3.25639510e-03, -1.72244744e+02],
+                           [ 1.09735634e-04,  1.90284246e-01, -4.73095848e+02],
+                           [-1.43293200e-08,  1.57991111e-06,  9.79020258e-01]])
+        # And after 2021-11-15 warmup:
+        matrix = np.array([[ 7.20637982e-02,  3.47643382e-03, -1.67991852e+02],
+                           [ 1.21767596e-04,  1.87499251e-01, -4.40704084e+02],
+                           [-1.94392780e-08,  1.55851941e-06,  9.78764126e-01]])
+        self.stepToPix = skimage.transform.ProjectiveTransform(matrix=matrix)
+        self.pixToStep = self.stepToPix.inverse
+
+    @classmethod
+    def fitTransform(cls, scans):
+        t =  skimage.transform.ProjectiveTransform()
+
+        src = scans[['xstep', 'ystep']].values.astype('f4')
+        dst = scans[['xpix', 'ypix']].values.astype('f4')
+        t.estimate(src, dst)
+
+        return t
 
     def ledPosition(self, y, led=None):
         # Ignores Y, which is wrong -- CPL
@@ -240,7 +325,7 @@ class GimbalIlluminator(NirIlluminator):
         upDim = steps.ndim < 2
         if upDim:
             steps = np.atleast_2d(steps)
-        pix = stepToPix(steps)
+        pix = self.stepToPix(steps)
         return pix[0] if upDim else pix
 
     def pixToSteps(self, pix):
@@ -248,12 +333,11 @@ class GimbalIlluminator(NirIlluminator):
         upDim = pix.ndim < 2
         if upDim:
             pix = np.atleast_2d(pix)
-        steps = np.round(pixToStep(pix)).astype('i4')
+        steps = np.round(self.pixToStep(pix)).astype('i4')
         return steps[0] if upDim else steps
-
     def getSteps(self):
-        xPos = int(self._cmd('/1?0'))
-        yPos = int(self._cmd('/2?0'))
+        xPos = int(self.dev.cmd('/1?0'))
+        yPos = int(self.dev.cmd('/2?0'))
         
         return xPos, yPos
 
@@ -271,11 +355,11 @@ class GimbalIlluminator(NirIlluminator):
         xPos, yPos = self.getSteps()
         if preload:
             cmdStr = f"move {x-self.preloadDistance} {y-self.preloadDistance}"
-            self._cmd(cmdStr, debug=True, maxTime=45)
+            self.dev.cmd(cmdStr, debug=True, maxTime=45)
             
         dist = max(abs(x-xPos), abs(y-yPos))
         cmdStr = f"move {x} {y}"
-        self._cmd(cmdStr, debug=True, maxTime=dist/1000)
+        self.dev.cmd(cmdStr, debug=True, maxTime=dist/1000)
         
         xNew, yNew = self.getSteps()
         
