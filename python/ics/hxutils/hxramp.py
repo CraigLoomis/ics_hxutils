@@ -161,9 +161,7 @@ class HxRamp(object):
         except:
             irpImage = None
 
-        if raw:
-            pass
-        elif self.interleaveRatio != 1:
+        if not raw:
             irpImage0 = irpImage
             irpImage = constructFullIrp(irpImage, self.nchan,
                                         refPix=self.interleaveOffset)
@@ -377,13 +375,14 @@ def interpolateChannelIrp(rawChan, refRatio, refOffset, doFlip=True):
     We do not yet know how to interpolate, so simply repeat the pixel refRatio times.
 
     """
-
-    if refRatio == 1:
-        return rawChan
-
     irpHeight, irpWidth = rawChan.shape
     refChan = np.empty(shape=(irpHeight, irpWidth * refRatio), dtype=rawChan.dtype)
 
+    # For now, use the per-row median
+    # refChan[:,:] = np.median(rawChan, axis=1)[:,None]
+    # return refChan
+
+    # Or repeat
     if doFlip:
         rawChan = rawChan[:, ::-1]
 
@@ -431,13 +430,13 @@ def constructFullIrp(rawIrp, nChannel=32, refPix=None, oddEven=True):
     """
 
     logger = logging.getLogger('constructIRP')
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     h4Width = 4096
     height, width = rawIrp.shape
 
     # If we are a full frame, no interpolation is necessary.
-    if width == h4Width:
+    if False and width == h4Width:
         return rawIrp
 
     dataChanWidth = h4Width // nChannel
