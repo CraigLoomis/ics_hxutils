@@ -5,8 +5,9 @@ yaml = ruamel_yaml.YAML(typ='safe')
 configMap = dict()
 dataMap = dict()
 
-configKeys = dict(nirLabReduxRoot="/data/redux",
-                  nirLabConfigRoot = "/data/pfsx/config")
+# "root"s, but still relative to dataRoot, etc.
+configKeys = dict(nirLabReduxRoot="redux",
+                  nirLabConfigRoot = "config")
 
 configMap['detector'] = dict(template="{nirLabConfigRoot}/{cam}/detector.yaml",
                              loader=yaml.load)
@@ -17,17 +18,22 @@ dataMap['rampFile'] = dict(template="pfsx/{pfsDay}/sps/PF{site}B{visit:06d}{spec
 dataMap['reduxDir'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}")
 
 dataMap['mask'] = dict(template="{nirLabReduxRoot}/{cam}/calibs/mask-{visit:06d}-{cam}.fits",
-                       loaderModule='ics.hxutils.mask')
+                       loaderModule='mask')
 dataMap['dark'] = dict(template="{nirLabReduxRoot}/{cam}/calibs/dark-{visit:06d}-{cam}.fits",
-                       loaderModule='ics.hxutils.darkCube')
+                       loaderModule='darkCube')
 
-dataMap['isr'] = dict(template="{reduxDir}/isr-{visit:06d}-{cam}.fits")
-dataMap['postageStamp'] = dict(template="{reduxDir}/ps-{visit:06d}-{cam}.fits")
-dataMap['dither'] = dict(template="{reduxDir}/dither-{wave:04.0f}_{row:04.0f}_{focus:03.0f}_{visit:06d}-{cam}.fits")
+dataMap['isr'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/isr-{visit:06d}-{cam}.fits")
+dataMap['postageStamp'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
+                               "ps-{visit:06d}-{cam}.fits")
+dataMap['dither'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
+                         "dither-{wave:04.0f}_{row:04.0f}_{focus:03.0f}_{visit:06d}-{cam}.fits")
 
-dataMap['repeatsGrid'] = dict(template="{reduxDir}/repeatsGrid-{wave:04.0f}_{row:04.0f}-{cam}.fits")
-dataMap['waveGrid'] = dict(template="{reduxDir}/waveGrid-{wave:04.0f}-{cam}.fits")
-dataMap['focusGrid'] = dict(template="{reduxDir}/focusGrid-{focus:03.0f}-{cam}.fits")
+dataMap['repeatsGrid'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
+                              "repeatsGrid-{wave:04.0f}_{row:04.0f}-{cam}.fits")
+dataMap['waveGrid'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
+                           "waveGrid-{wave:04.0f}-{cam}.fits")
+dataMap['focusGrid'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
+                            "focusGrid-{focus:03.0f}-{cam}.fits")
 
-dataMap['measures'] = dict(template="{reduxDir}/measures-{visit:06d}-{cam}.txt")
-
+dataMap['measures'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
+                           "measures-{visit:06d}-{cam}.txt")
