@@ -5,6 +5,7 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy
 import pandas as pd
 import skimage.transform
 import fitsio
@@ -28,13 +29,32 @@ reload(darkCube)
 reload(hxramp)
 reload(pfsutils)
 
-specIds = pfsSpectroIds.SpectroIds(partName='n1')
-nirButler = pfsButler.Butler(specIds=specIds, 
-                             configRoot=butlerMaps.configKeys['nirLabConfigRoot'])
-nirButler.addMaps(butlerMaps.configMap, butlerMaps.dataMap)
-nirButler.addKeys(butlerMaps.configKeys)
+logger = logging.getLogger('nirander')
+logger.setLevel(logging.INFO)
 
-scaleDtype = np.dtype([('index', '<i4'), 
+nirButler = None
+def newButler(experimentName='unnamed', cam='n1'):
+    """Create a butler containing extra maps/keys for cleanroom ops. """
+    global nirButler
+
+    reload(pfsButler)
+    reload(butlerMaps)
+
+    specIds = pfsSpectroIds.SpectroIds(partName=cam)
+    butler = pfsButler.Butler(specIds=specIds)
+                              # configRoot=butlerMaps.configKeys['nirLabConfigRoot'])
+
+    butler.addKeys(butlerMaps.configKeys)
+    butler.addMaps(butlerMaps.configMap, butlerMaps.dataMap)
+    # butler.addMaps(dataMapDict=butlerMaps.dataMap)
+
+    butler.addKeys(dict(experimentName=experimentName))
+
+    nirButler =  butler
+    return butler
+newButler()
+
+scaleDtype = np.dtype([('index', '<i4'),
                        ('visit', '<i4'), 
                        ('xstep', '<i4'), 
                        ('ystep', '<i4'), 
