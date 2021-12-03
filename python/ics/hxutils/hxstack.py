@@ -8,9 +8,11 @@ import astropy.io.fits as pyfits
 import numpy as np
 import fitsio
 
+from ics.hxutils import hxramp
+
 logger = logging.getLogger('hxstack')
 
-rootDir = "/data/pfsx/raw"
+rootDir = "/data/ramps"
 calibDir = "/data/pfsx/calib"
 sitePrefix = "PFJB"
 nightPattern = '20[12][0-9]-[01][0-9]-[0-3][0-9]'
@@ -21,16 +23,19 @@ class HxCalib(object):
         self.badMask = badMask
         self.darkStack = darkStack
 
-    def isr(self, visit, matchLevel=False, scaleLevel=False, aOK=True):
+    def isr(self, visit, matchLevel=False, scaleLevel=False, aOK=False):
         if aOK:
             # path = rampPath(visit, cam=self.cam, aOK=aOK)
             cds, nreads = aramp(visit, cam=self.cam)
         else:
-            path = rampPath(visit, cam=self.cam, aOK=False)
-            _ramp = ramp(path)
+            path = rampPath(visit, cam=self.cam)
+            _ramp = hxramp.HxRamp(path)
 
-            nreads = rampNreads(_ramp)
-            cds = rampCds(_ramp)
+            nreads = _ramp.nreads
+            cds = _ramp.cds()
+        if self.darkStack is None:
+            return cds
+
         dark = self.darkStack[nreads-1]
 
         if matchLevel or scaleLevel:
@@ -107,6 +112,9 @@ def rampPath(visit=-1, cam=None, prefix=None):
         fileGlob = f'{fileGlob}[0-9][0-9]'
     else:
         armNums = dict(b=1, r=2, n=3, m=4)
+
+        # For b9/n9
+        armNums = dict(b=3, n=3)
         fileGlob = '%s%d%d' % (fileGlob, int(cam[1]), armNums[cam[0]])
                                
     ramps = glob.glob(os.path.join(rootDir, night, '%s%s.f*' % (prefix, fileGlob)))
@@ -234,11 +242,11 @@ def rampNreads(pathOrFits):
     ff = ramp(pathOrFits)
     return len(ff)-1
 
-def rampRead(pathOrFits, readNumber=-1, doCorrect=True):
+def rampRead(pathOrFits, readNumber=-1, doCorrect=True, dtype='f4'):
     ff = ramp(pathOrFits)
 
     fitsIdx = readIdxToHduIdx(ff, readNumber)
-    read = ff[fitsIdx].read().astype('f4')
+    read = ff[fitsIdx].read().astype(dtype)
     height, width = read.shape
 
     if doCorrect is False:
@@ -249,11 +257,11 @@ def rampRead(pathOrFits, readNumber=-1, doCorrect=True):
     else:
         return refPixel4(read)[0]
 
-def rampCds(pathOrFits, r0=0, r1=-1, doCorrect=True):
+def rampCds(pathOrFits, r0=0, r1=-1, doCorrect=True, dtype='f4'):
     ff = ramp(pathOrFits)
 
-    read0 = rampRead(ff, r0, doCorrect=doCorrect)
-    read1 = rampRead(ff, r1, doCorrect=doCorrect)
+    read0 = rampRead(ff, r0, doCorrect=doCorrect, dtype=dtype)
+    read1 = rampRead(ff, r1, doCorrect=doCorrect, dtype=dtype)
     dread = read1-read0
 
     return dread
@@ -331,16 +339,99 @@ def medianCubes(visits, r0=0, r1=-1, cam=None, doCorrect=True):
         outStack[read_i, :, :] = np.median(tempStack, axis=0)
     
     return outStack
-                
-def irpCorrect(im):
+
+def timeStack(im, nchan=32):
+    """Given an N channel image, return
+
+    Parameters
+    ----------
+    im : [type]
+        [description]
+    nchan : int, optional
+        [description], by default 32
+    """
+
+    pass
+
+def irpCorrect(im, nChannel=32):
     height, width = im.shape
 
     if width > height:
-        data, ref = refSplit(im)
+        # data, ref = refSplit(im)
+        data, ref = splitIRP(im, nChannel=nChannel)
         return data - ref
     else:
         return im
-    
+
+def splitIRP(rawImg, nChannel=32, startPix=None, oddEven=True):
+    """Given a single read, return the data and the reference images.
+
+    Args
+    ----
+    rawImg : ndarray
+      A raw read from the ASIC, possibly with interleaved reference pixels.
+    nChannel : `int`
+      The number of readout channels from the H4
+    startPix : `int`
+      The number of data pixels to read before a reference pixel.
+    oddEven : `bool`
+      Whether readout direction flips between pairs of amps.
+
+    The image is assumed to be a full-width 4k read: IRP reads can only be full width.
+
+    Major TODO/decision:
+    This does *NOT* interpolate N:1 reference pixels to all the data pixels.
+    """
+
+    h4Width = 4096
+    height, width = rawImg.shape
+
+    # Can be no IRP
+    if width <= h4Width:
+        return rawImg, None
+
+    dataWidth = h4Width
+    dataChanWidth = dataWidth // nChannel
+    rawChanWidth = width // nChannel
+    refChanWidth = rawChanWidth - dataChanWidth
+    refRatio = dataChanWidth // refChanWidth
+    refSkip = refRatio + 1
+
+    if startPix is None:
+        startPix = refRatio
+
+    refChans = []
+    dataChans = []
+    for c_i in range(nChannel):
+        rawChan = rawImg[:, c_i*rawChanWidth:(c_i+1)*rawChanWidth]
+        doFlip = oddEven and c_i%2 == 1
+
+        if doFlip:
+            rawChan = rawChan[:, ::-1]
+        refChan = rawChan[:, startPix::refSkip]
+
+        dataChan = np.empty(shape=(height, dataChanWidth), dtype='u2')
+        dataPix = 0
+        for i in range(0, refRatio):
+            # Do not copy over reference pixels, wherever they may be.
+            if i == startPix:
+                continue
+            dataChan[:, dataPix::refRatio] = rawChan[:, i::refSkip]
+            dataPix += 1
+
+        if doFlip:
+            refChan = refChan[:, ::-1]
+            dataChan = dataChan[:, ::-1]
+
+        refChans.append(refChan)
+        dataChans.append(dataChan)
+
+    refImg = np.hstack(refChans)
+    dataImg = np.hstack(dataChans)
+
+    return dataImg, refImg
+
+
 def refSplit(im, evenOdd=True):
     height, width = im.shape
     nAmps = 32                  # All that is implemented in firmware
@@ -391,7 +482,8 @@ def refPixel4(im, doRows=True, doCols=True, nCols=4, nRows=4, colWindow=4):
         Take a 9-row running average of the left&right rows.
         Subtract that from each row.
     """
-    corrImage = im * 0
+    im = im.astype('f4')
+    corrImage = np.zeros_like(im)
     imHeight, imWidth = im.shape
     
     rowRefs = np.zeros((nRows*2, imHeight), dtype='f4')
@@ -655,12 +747,11 @@ def pfsbToPfsa(bFiles):
             hdr = fitsio.read_header(rampPath)
             try:
                 data_type = hdr['IMAGETYP']
-                hdr.add_record(dict(name='DATA-TYP', value=data_type, comment='Subaru-stype exposure type'))
+                hdr.add_record(dict(name='DATA-TYP', value=data_type, comment='Subaru-type exposure type'))
             except:
                 data_type = hdr['DATA-TYP']
 
             
-            hdr.add_record(dict(name='W_HNREAD', value=nreads, comment='number of reads in ramp'))
             cds = rampCds(thisRamp)
             pathParts = list(rampPath.parts)
             pathParts[-1] = 'PFJA' + pathParts[-1][4:]
