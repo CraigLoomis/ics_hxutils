@@ -351,9 +351,9 @@ class GimbalIlluminator(Illuminator):
     
     def moveSteps(self, dx, dy):
         xPos, yPos = self.getSteps()
-        self.moveTo(xPos+dx, yPos+dy)
+        self.moveToSteps(xPos+dx, yPos+dy)
         
-    def moveTo(self, x, y, preload=True):
+    def moveToSteps(self, x, y, preload=True):
         x = int(x)
         y = int(y)
         xPos, yPos = self.getSteps()
@@ -375,7 +375,7 @@ class GimbalIlluminator(Illuminator):
     def moveToPix(self, xpix, ypix, preload=True):
         xstep, ystep = self.pixToSteps([xpix, ypix])
         
-        xNew, yNew = self.moveTo(xstep, ystep, preload=preload)
+        xNew, yNew = self.moveToSteps(xstep, ystep, preload=preload)
         return self.stepsToPix([xNew, yNew])
 
     def getTargetPosition(self, wave, row):
@@ -480,54 +480,23 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True)
 
             # We want to always move in the same direction: from low.
             preload = (xStep < lastXStep or yStep < lastYStep)
-            meade.moveTo(xStep, yStep, preload=preload)
+            meade.moveToSteps(xStep, yStep, preload=preload)
             lastXStep = xStep
             lastYStep = yStep
 
             if call is not None:
                 ret = call(meade)
-                callRet.append(ret)
             else:
-                visit = takeRamp('n1', nread=nread)
-                res.append([visit, xStep, yStep])
+                ret = takeBareSpot(meade, nread=nread)
+            callRet.append(ret)
 
     if led is not None:
         meade.ledsOff()
 
     if call is None:
-        return [pd.DataFrame(res, columns=('visit', 'xstep', 'ystep'))]
+        return pd.concat(callRet, ignore_index=True)
     else:
         return callRet
-
-def checkMoveRepeats(meade, start=(2000,2000), nrep=10, npos=5, pixStep=2):
-    xrepeats = []
-    yrepeats = []
-    far = []
-    
-    rng = np.random.default_rng(2394)
-
-    x0, y0 = start
-    xx = np.arange(x0, x0 + npos*pixStep+1, pixStep)
-    yy = np.arange(y0, y0 + npos*pixStep+1, pixStep)
-    
-    for i in range(nrep):
-        farx, fary = rng.uniform(0,4096), rng.uniform(0,4096)
-    
-        tscan = motorScan(meade, farx, fary, led=(1085,30))
-        far.append(tscan)
-        tscan = motorScan(meade, xx, y0, led=(1085,30))
-        xrepeats.append(tscan)
-    
-        tscan = motorScan(meade, farx, fary, led=(1085,30))
-        far.append(tscan)
-        tscan = motorScan(meade, x0, yy, led=(1085,30))
-        yrepeats.append(tscan)
-        
-    measureSet(meade, far)
-    measureSet(meade, xrepeats)
-    measureSet(meade, yrepeats)
-
-    return xrepeats, yrepeats, far
 
 def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     xrepeats = []
@@ -723,7 +692,7 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
                 if takeDarks:
                     meade.ledsOff()
                     xc, yc = meade.pixToSteps([meade.leds.position[w], row])
-                    meade.moveTo(xc, yc, preload=True)
+                    meade.moveToSteps(xc, yc, preload=True)
                     # Take and save a fresh dark
                     dark = takeSuperDark(meade, force=True, nread=3, nexp=5)
                     nirButler.put(dark, 'dark', dict(visit=dark.visit0))
@@ -1021,12 +990,7 @@ def scanForFocus(center, spacing=5, r=4, measureCall=None):
 def scanForCrudeFocus(center, spacing=25, r=3, measureCall=None):
     return _scanForFocus(center, spacing=spacing, r=r, measureCall=measureCall)
 
-def stepsToPix(xstep, ystep):
-    # This is absolutely disguting.
-    meade =  GimbalIlluminator()
-    return meade.stepsToPix([xstep, ystep])
-
-def measureSet(scans, hxCalib=None, thresh=1000, center=None,
+def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
                radius=100, skipDone=True, ims=None, trimBad=True,
                convolveSigma=None, kernel=None):
     """Measure the best spots in a DataFrame of images
@@ -1073,7 +1037,7 @@ def measureSet(scans, hxCalib=None, thresh=1000, center=None,
             if np.isnan(center_i[0]) or np.isnan(center_i[1]):
                 try:
                     stepCenter = (scans.loc[scan_i, 'xstep'], scans.loc[scan_i, 'ystep'])
-                    center_i = stepsToPix(*stepCenter)
+                    center_i = meade.stepsToPix(stepCenter)
                     logger.info((f"{scan_i} center from steps: {center_i}"))
                 except Exception as e:
                     logger.warn(f'failed to get a center for {scans.loc[scan_i]}: {e}')
