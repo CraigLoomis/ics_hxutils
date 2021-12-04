@@ -383,7 +383,7 @@ class GimbalIlluminator(Illuminator):
 
         led = self.leds[self.leds.wave == wave]
         col = int(led.position)
-        pos = (row, col)
+        pos = (col, row)
         try:
             pos = self.nudges[pos]
         except KeyError:
