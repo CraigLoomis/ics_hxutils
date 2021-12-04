@@ -54,13 +54,6 @@ def newButler(experimentName='unnamed', cam='n1'):
     return butler
 newButler()
 
-scaleDtype = np.dtype([('index', '<i4'),
-                       ('visit', '<i4'), 
-                       ('xstep', '<i4'), 
-                       ('ystep', '<i4'), 
-                       ('xpix', '<f4'), 
-                       ('ypix', '<f4')])
-
 class AidenPi(object):
     def __init__(self, name, host, port=9999, logLevel=logging.INFO):
         """Command one of Aiden's pi programs. """
@@ -291,6 +284,10 @@ class GimbalIlluminator(Illuminator):
         matrix = np.array([[ 7.20637982e-02,  3.47643382e-03, -1.67991852e+02],
                            [ 1.21767596e-04,  1.87499251e-01, -4.40704084e+02],
                            [-1.94392780e-08,  1.55851941e-06,  9.78764126e-01]])
+        # Redo:
+        matrix =  np.array([[ 7.20562073e-02,  3.51050849e-03, -1.69401636e+02],
+                            [ 9.72181704e-05,  1.87569342e-01, -4.40832783e+02],
+                            [-2.99269899e-08,  1.58021944e-06,  9.78774959e-01]])
         self.stepToPix = skimage.transform.ProjectiveTransform(matrix=matrix)
         self.pixToStep = self.stepToPix.inverse
 
@@ -303,6 +300,11 @@ class GimbalIlluminator(Illuminator):
         t.estimate(src, dst)
 
         return t
+
+    def setTransform(self, transform):
+        matrix =  transform.params
+        self.stepToPix = skimage.transform.ProjectiveTransform(matrix=matrix)
+        self.pixToStep = self.stepToPix.inverse
 
     def ledPosition(self, y, led=None):
         # Ignores Y, which is wrong -- CPL
@@ -452,8 +454,7 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True)
         meade.led(wavelength=wavelength, dutyCycle=dutyCycle)
         if xpos is None:
             xpos = meade.leds.position[wavelength]
-    res = []
-    
+
     if np.isscalar(xpos):
         if np.isscalar(ypos):
             xpos = [xpos]
