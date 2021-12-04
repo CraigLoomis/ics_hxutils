@@ -251,6 +251,8 @@ class GimbalIlluminator(Illuminator):
             ip = 'gimbalpi'
         self.dev =  AidenPi('gimbal', ip, logLevel=logLevel)
 
+        self.cam = cam
+
         self.logger = logging.getLogger('meade')
         self.logger.setLevel(logLevel)
 
@@ -677,6 +679,25 @@ def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
     for r_i in range(nramps):
         gridVisits = motorScan(meade, xx, yy, led=led, posInPixels=False)
         visits.extend(gridVisits)
+
+    return pd.concat(visits, ignore_index=True)
+
+def ditherAtPix(meade, pos, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
+    """Acquire set of dithered starting from the given pixel position. """
+
+    if npos%2 != 1:
+        raise ValueError("not willing to deal with non-odd dithering")
+    rad = npos//2
+    xc, yc = meade.pixToSteps(pos)
+    x0, y0 = xc-(rad*xsteps), yc-(rad*ysteps)
+
+    xx = x0 + np.arange(npos)*xsteps
+    yy = y0 + np.arange(npos)*ysteps
+
+    visits = []
+    for r_i in range(nramps):
+        ditherVisits = motorScan(meade, xx, yy, nread=nread, posInPixels=False)
+        visits.extend(ditherVisits)
 
     return pd.concat(visits, ignore_index=True)
 
