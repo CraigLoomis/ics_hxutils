@@ -737,6 +737,72 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
         meade.ledsOff()
         return ditherList
 
+def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
+            doDither=False, nread=3):
+    """Primary acquisition routine."""
+
+    if waves is None:
+        waves = meade.leds.wave
+    if np.isscalar(waves):
+        waves = [waves]
+
+    if np.isscalar(rows):
+        rows = [rows]
+    rows = np.array(rows, dtype='f4')
+
+    if np.isscalar(focus):
+        focus = [focus]
+    focus = np.array(focus, dtype='f4')
+
+    spotList = []
+    try:
+        for w_i, w in enumerate(waves):
+            meade.led(w)
+            led, dutyCycle, _ = meade.ledState()
+            for r_i, row in enumerate(rows):
+                pos = meade.getTargetPosition(w, row)
+                if not doDither:
+                    meade.moveToPix(*pos, preload=True)
+                for f_i, f in enumerate(focus):
+                    print(f"led {w} on row {row} with focus {f}")
+                    pfsutils.oneCmd('xcu_n1', f'motors move piston={f} abs microns')
+                    try:
+                        if doDither:
+                            meas = ditherAtPix(meade, pos=pos, nread=3,
+                                               comment=f'ditherSet_{w}_{round(row)}_{round(f)}')
+                        else:
+                            meas = takeBareSpot(meade, nread=3,
+                                                comment=f'spotSet_{w}_{round(row)}_{round(f)}')
+                    except Exception as e:
+                        raise
+
+                    meas['focus'] = f
+                    meas['wavelength'] = w
+                    meas['dutyCycle'] = dutyCycle
+                    spotList.append(meas)
+
+                    rowFrame = pd.concat(spotList, ignore_index=True)
+                    if butler is not None:
+                        outFileName = writeMeasures(butler, rowFrame)
+                        print(f"wrote {len(rowFrame)} lines to {outFileName} "
+                              f"at led {w} on row {row} with focus {f}")
+    except Exception as e:
+        print(f'oops: {e}')
+        # breakpoint()
+        raise
+    finally:
+        meade.ledsOff()
+
+    return pd.concat(spotList, ignore_index=True)
+
+def writeMeasures(butler, df):
+    outFileName = butler.getPath('measures', idDict=dict(visit=df.visit.min()))
+    outFileName.parent.mkdir(mode=0o2775, parents=True, exist_ok=True)
+    with open(outFileName, mode='w') as outf:
+        outf.write(df.to_string())
+
+    return outFileName
+
 def trimRect(im, c, r=100):
     cx, cy = c
     im2 = im[cy-r:cy+r, cx-r:cx+r]
