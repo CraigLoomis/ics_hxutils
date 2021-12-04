@@ -553,7 +553,7 @@ def setMask(disp, badMask, alpha=0.75):
     dispMask(disp, alpha=alpha)
 
 def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=None,
-              zoom=8, cam=None, lock=True, badMask=None):
+              zoom=8, scale='zscale', cam=None, lock=True, badMask=None):
     """Show a grid of images centered on their spots."""
 
     if tileGrid is not None:
@@ -568,10 +568,12 @@ def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=No
         disp.set('tile grid')
         disp.set('tile yes')
         disp.set(f'zoom to {zoom}')
-
+        disp.set(f'scale mode {scale}')
     if tileGrid is not None:
-        disp.set(f'tile grid layout {tileGrid[1]} {tileGrid[1]}')
+        disp.set(f'tile grid layout {tileGrid[0]} {tileGrid[1]}')
         disp.set('tile grid direction y')
+    else:
+        disp.set('tile grid mode automatic')
 
     if lock:
         disp.set('lock frame image')
