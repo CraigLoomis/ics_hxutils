@@ -714,11 +714,8 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
                     print("ditherList: ", len(ditherList))
                     rowFrame =  pd.concat(ditherList, ignore_index=True)
                     if butler is not None:
-                        outFileName = butler.getPath('measures', idDict=dict(visit=rowFrame.visit.min()))
-                        outFileName.parent.mkdir(mode=0o2775, parents=True, exist_ok=True)
-                        with open(outFileName, mode='w') as outf:
-                            outf.write(rowFrame.to_string())
-                            print(f"wrote {len(rowFrame)} lines to {outFileName} at led {w} on row {row} with focus {f}")
+                        outFileName = writeMeasures(butler, rowFrame)
+                        print(f"wrote {len(rowFrame)} lines to {outFileName} at led {w} on row {row} with focus {f}")
     except Exception as e:
         print(f'oops: {e}')
         # breakpoint()
@@ -946,7 +943,13 @@ def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
     return scanFrame
 
 def basicDataFrame(meade, visits, focus=None):
-    scanFrame = pd.DataFrame(dict(visit=visits, focus=focus))
+    """Create the core dataframe for some visits. Queries the controller for step/led info"""
+
+    if np.isscalar(visits):
+        visits = [visits]
+    scanFrame = pd.DataFrame(dict(visit=visits))
+    if focus is not None:
+        scanFrame['focus'] = focus
 
     wavelength, dutyCycle, _ = meade.ledState()
     xstep, ystep = meade.getSteps()
@@ -1083,7 +1086,7 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
     
     return scans
 
-def spotGrid(meade, butler, focus, waves=None, rows=None):
+def spotGridXXX(meade, butler, focus, waves=None, rows=None):
     """Take a single image at a single focus at a grid of positions."""
 
     if waves is None:
@@ -1095,30 +1098,29 @@ def spotGrid(meade, butler, focus, waves=None, rows=None):
         rows = [rows]
     rows = np.array(rows, dtype='f4')
 
+    if np.isscalar(focus):
+        focus = [focus]
+    rows = np.array(rows, dtype='f4')
+
     measRows = []
     measFrame = []
     try:
         pfsutils.oneCmd('xcu_n1', f'motors move piston={focus} abs microns')
         for w_i, w in enumerate(waves):
+            meade.led(w)
+            led, dutyCycle, _ = meade.ledState()
             for r_i, row in enumerate(rows):
-                meade.led(w)
-                led, dutyCycle, _ = meade.ledState()
                 print(f"led {w} on row {row} with focus {focus}")
                 pos = meade.getTargetPosition(w, row)
 
                 meas = takeSpot(meade, pos=pos, comment=f'testGrid_{w}_{row}')
-                meas.loc[:, 'focus'] = focus
-                logger.info(f'new row: {meas}')
+                meas['focus'] = focus
                 measRows.append(meas)
-                measFrame =  pd.concat(measRows, ignore_index=True)
-                logger.info(f'last row: {measFrame.iloc[-1]}')
+                measFrame = pd.concat(measRows, ignore_index=True)
                 if butler is not None:
-                    outFileName = butler.getPath('measures', idDict=dict(visit=measFrame.visit.min()))
-                    outFileName.parent.mkdir(mode=0o2775, parents=True, exist_ok=True)
-                    with open(outFileName, mode='w') as outf:
-                        outf.write(measFrame.to_string())
-                        print(f"wrote {len(measFrame)} lines to {outFileName} at led {w} "
-                              f"on row {row} with focus {focus}")
+                    outFileName = writeMeasures(butler, measFrame)
+                    print(f"wrote {len(measFrame)} lines to {outFileName} at led {w} "
+                          f"on row {row} with focus {focus}")
     except Exception as e:
         print(f'oops: {e}')
         # breakpoint()
@@ -1128,20 +1130,29 @@ def spotGrid(meade, butler, focus, waves=None, rows=None):
 
     return measFrame
 
+def takeBareSpot(meade, nread=3, comment=None):
+    """Lowest-level exposure which returns a dataframe with (visit, xstep, ystep, led) """
+
+    visit = takeRamp(cam=meade.cam, nread=nread, exptype='object', comment=comment)
+    df = basicDataFrame(meade, visits=[visit])
+
+    return df
+
 def takeSpot(meade, pos=None, focus=None, light=None, nread=3, comment=None):
+    """Lowest-level exposure which optionally sets focus/led/gimbal and returns a dataframe. """
+
     if pos is not None:
         meade.moveToPix(*pos)
     if focus is not None:
         pfsutils.oneCmd('xcu_n1', f'motors move piston={focus} abs microns')
     if light is not None:
-        if len(light) == 1:
+        if np.isscalar(light):
             meade.led(light)
         else:
             meade.led(*light)
-    print(meade.ledState())
-    visit = takeRamp(cam='n1', nread=nread, exptype='object', comment=comment)
-
-    df = basicDataFrame(meade, visits=[visit], focus=focus)
+    df = takeBareSpot(meade, nread=nread, comment=comment)
+    if focus is not None:
+        df['focus'] = focus
 
     if light is not None:
         meade.ledsOff()
