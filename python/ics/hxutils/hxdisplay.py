@@ -3,6 +3,7 @@ import logging
 import os
 import pathlib
 
+import fitsio
 import numpy as np
 import matplotlib.pyplot as plt
 
