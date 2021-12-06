@@ -1,10 +1,12 @@
 import functools
 import itertools
 import logging
-logging.basicConfig(format='%(asctime)s %(name)s  %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO)
+
 import gpiozero
 import trio
+
+logging.basicConfig(format='%(asctime)s %(name)s  %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO)
 
 class GpioBinarySelect(object):
     def __init__(self, pins=None, values=None):
