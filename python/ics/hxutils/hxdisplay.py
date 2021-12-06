@@ -549,7 +549,7 @@ def dispMask(disp, alpha=0.5):
 
 def setMask(disp, badMask, alpha=0.75):
     disp.set('mask clear')
-    disp.set('array mask [dim=4096,bitpix=32]', badMask)
+    disp.set(f'array mask [xdim={badMask.shape[1]},ydim={badMask.shape[0]},bitpix=32]', badMask)
     dispMask(disp, alpha=alpha)
 
 def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=None,
@@ -598,3 +598,65 @@ def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=No
         xpix, ypix = getPix(row, meade)
         disp.set(f'pan to {xpix} {ypix} image')
         disp.set('lock scalelimits; lock scale')
+
+def ditherName(butler, group):
+    """Given a dother roup, return the dither FITS file name. """
+    focus = group.focus.unique()
+    if len(focus) != 1:
+        raise ValueError(f"not a unique focus value: {focus}")
+    else:
+        focus = focus[0]
+
+    row = group.row.unique()
+    if len(row) != 1:
+        raise ValueError(f"not a unique row value: {row}")
+    else:
+        row = row[0]
+
+    key = dict(focus=focus,
+               wave=group.wavelength.unique()[0],
+               visit=group.visit.min(),
+               row=row)
+
+    path = butler.search('dither', pfsDay='*', **key)
+    return path[0]
+
+def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7, badMask=None):
+    """Generate the canonical dither display: one page per wavelength, focus values per column."""
+
+    waveDither = ditherSet[ditherSet.wavelength == wavelength].copy()
+    waveDither = waveDither.sort_values(['focus', 'ypix', 'visit'], ascending=[True, False, True])
+    waveGroups = waveDither.groupby(['wavelength', 'row', 'focus'], sort=False)
+
+    nrows = len(waveDither.row.unique())
+    nfocus = len(waveDither.focus.unique())
+
+    disp.set('frame delete all')
+    disp.set('tile grid')
+    disp.set('tile yes')
+    disp.set(f'zoom to {zoom}')
+    disp.set(f'scale mode {scale}')
+    disp.set(f'tile grid layout {nfocus} {nrows}')
+    disp.set('tile grid direction y')
+
+    disp.set('lock frame none')
+
+    for name, group in waveGroups:
+        path = ditherName(butler, group)
+        print(name, path)
+
+        im, hdr = fitsio.read(path, header=True)
+        disp.set("frame new")
+        disp.set_np2arr(im)
+
+        ctr = int(round(hdr['XPIX'])), int(round(hdr['YPIX']))
+        rad = im.shape[0]//(3*2)
+        xslice = slice(ctr[0]-rad, ctr[0]+rad)
+        yslice = slice(ctr[1]-rad, ctr[1]+rad)
+
+        if badMask is not None:
+            imask = badMask[yslice, xslice]
+            print(f'{xslice}, {yslice}, {np.sum(imask)}')
+            setMask(disp, imask)
+
+    return waveGroups
