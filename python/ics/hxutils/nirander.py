@@ -651,7 +651,7 @@ def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
 
     return pd.concat(visits, ignore_index=True)
 
-def ditherAtPix(meade, pos, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
+def ditherAtPix(meade, pos, npos=3, nread=3, xsteps=5, ysteps=2):
     """Acquire set of dithered starting from the given pixel position. """
 
     if npos%2 != 1:
@@ -663,12 +663,9 @@ def ditherAtPix(meade, pos, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
     xx = x0 + np.arange(npos)*xsteps
     yy = y0 + np.arange(npos)*ysteps
 
-    visits = []
-    for r_i in range(nramps):
-        ditherVisits = motorScan(meade, xx, yy, nread=nread, posInPixels=False)
-        visits.extend(ditherVisits)
+    ditherVisits = motorScan(meade, xx, yy, nread=nread, posInPixels=False)
 
-    return pd.concat(visits, ignore_index=True)
+    return ditherVisits
 
 def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
               nramps=1, takeDarks=False):
@@ -755,8 +752,7 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
                     pfsutils.oneCmd('xcu_n1', f'motors move piston={f} abs microns')
                     try:
                         if doDither:
-                            meas = ditherAtPix(meade, pos=pos, nread=3,
-                                               comment=f'ditherSet_{w}_{round(row)}_{round(f)}')
+                            meas = ditherAtPix(meade, pos=pos, nread=3)
                         else:
                             meas = takeBareSpot(meade, nread=3,
                                                 comment=f'spotSet_{w}_{round(row)}_{round(f)}')
