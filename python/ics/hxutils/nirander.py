@@ -76,7 +76,7 @@ class AidenPi(object):
         ----
         cmdStr : str
             Either "move x y" or a raw AllMotion command. "move" commands
-            are checked against internal limit, so should always be used to 
+            are checked against internal limit, so should always be used to
             move.
         """
         if debug:
@@ -343,17 +343,17 @@ class GimbalIlluminator(Illuminator):
     def getSteps(self):
         xPos = int(self.dev.cmd('/1?0'))
         yPos = int(self.dev.cmd('/2?0'))
-        
+
         return xPos, yPos
 
     def getPix(self):
         xSteps, ySteps = self.getSteps()
         return self.stepsToPix([xSteps, ySteps])
-    
+
     def moveSteps(self, dx, dy):
         xPos, yPos = self.getSteps()
         self.moveToSteps(xPos+dx, yPos+dy)
-        
+
     def moveToSteps(self, x, y, preload=True):
         x = int(x)
         y = int(y)
@@ -361,21 +361,21 @@ class GimbalIlluminator(Illuminator):
         if preload:
             cmdStr = f"move {x-self.preloadDistance} {y-self.preloadDistance}"
             self.dev.cmd(cmdStr, debug=True, maxTime=45)
-            
+
         dist = max(abs(x-xPos), abs(y-yPos))
         cmdStr = f"move {x} {y}"
         self.dev.cmd(cmdStr, debug=True, maxTime=dist/1000)
-        
+
         xNew, yNew = self.getSteps()
-        
+
         if x != xNew or y != yNew:
             raise RuntimeError(f'did not move right: target={x},{y}, at={xNew},{yNew}')
-            
+
         return xNew, yNew
-            
+
     def moveToPix(self, xpix, ypix, preload=True):
         xstep, ystep = self.pixToSteps([xpix, ypix])
-        
+
         xNew, yNew = self.moveToSteps(xstep, ystep, preload=preload)
         return self.stepsToPix([xNew, yNew])
 
@@ -393,7 +393,7 @@ class GimbalIlluminator(Illuminator):
         return pos
 
     def home(self, doX=True, doY=True):
-        """Home one or more axes. Both by default. The controller leaves it """       
+        """Home one or more axes. Both by default. The controller leaves it """
 
         if doX:
             self.dev.cmd("home x", maxTime=100)
@@ -420,7 +420,7 @@ def takeRamp(cam, nread, nreset=1, exptype="test", comment="no_comment", quiet=T
     pfsutils.oneCmd(f'hx_{cam}', f'ramp nread={nread} exptype={exptype} objname=\"{comment}\"',
                     quiet=quiet)
     visit = hxramp.pathToVisit(hxramp.lastRamp(cam=cam))
-    
+
     return visit
 
 def moveFocus(cam, piston):
@@ -430,7 +430,7 @@ def moveFocus(cam, piston):
 
 def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True):
     """Move to the given positions and acquire spots.
-    
+
     Args
     ----
     xpos, ypos : number or array
@@ -443,11 +443,11 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True)
       How many reads to take per ramp
     posInPixels : bool
       Whether `xpos` and `ypos` are in pixels or steps.
-    
+
     ALWAYS sorts the positions and moves below the first position
-    before acquiring data. 
+    before acquiring data.
     """
-    
+
     if led is not None and led != (None,None):
         if np.isscalar(led):
             wavelength = led
@@ -466,10 +466,10 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True)
             xpos = [xpos]
     elif np.isscalar(ypos):
         ypos = [ypos]
-        
+
     xpos = sorted(xpos)
     ypos = sorted(ypos)
-    
+
     callRet = []
     lastXStep = lastYStep = 99999
     for x_i, x in enumerate(xpos):
@@ -508,7 +508,7 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     y0 &= ~1
 
     xscale = 5 # 5 steps = ~0.3pix
-    yscale = 2 # 2 steps = ~0.3pix    
+    yscale = 2 # 2 steps = ~0.3pix
     xx = np.arange(x0,x0+xscale*npos,xscale)
     yy = np.arange(y0,y0+yscale*npos,yscale)
 
@@ -518,13 +518,13 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
 
         yscan = motorScan(meade, xx, y0, led=(1085,30), posInPixels=False)
         yrepeats.append(yscan)
-    
+
     xreps = pd.concat(xrepeats, ignore_index=True)
     measureSet(xreps, hxCalib)
 
     yreps = pd.concat(yrepeats, ignore_index=True)
     measureSet(yreps, hxCalib)
-    
+
     return xreps, yreps
 
 def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
@@ -534,7 +534,7 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
     ctrIdx = (scale*scale)//2
     xsteps = frames['xstep'].unique()
     ysteps = frames['ystep'].unique()
-    
+
     xoffsets = {xs:(scale-1)-xi for xi,xs in enumerate(xsteps)}
     yoffsets = {ys:(scale-1)-yi for yi,ys in enumerate(ysteps)}
     # Need better sanity checks
@@ -625,7 +625,7 @@ def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False):
             ids.append(idDict)
             path = butler.get('dither', idDict=idDict)
             hdr = [dict(name='VISIT', value=int(row.visit), comment="visit of 0,0 image"),
-                   dict(name='WAVE', value=row.wavelength),                   
+                   dict(name='WAVE', value=row.wavelength),
                    dict(name='FOCUS', value=row.focus),
                    dict(name='XPIX', value=row.xpix, comment="measured xc of 0,0 image"),
                    dict(name='YPIX', value=row.ypix, comment="measured yc of 0,0 image"),
@@ -647,7 +647,7 @@ def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
     rad = npos//2
     xc, yc = meade.pixToSteps([meade.leds.position[led], row])
     x0, y0 = xc-(rad*xsteps), yc-(rad*ysteps)
-    
+
     xx = x0 + np.arange(npos)*xsteps
     yy = y0 + np.arange(npos)*ysteps
 
@@ -796,9 +796,9 @@ def writeMeasures(butler, df):
 def trimRect(im, c, r=100):
     cx, cy = c
     im2 = im[cy-r:cy+r, cx-r:cx+r]
-    
+
     return im2.copy()
-    
+
 def getPeaks(im, thresh=250.0, mask=None, center=None, radius=100,
              convolveSigma=None, kernel=None):
     bkgnd = sep.Background(im, mask=mask)
@@ -807,9 +807,9 @@ def getPeaks(im, thresh=250.0, mask=None, center=None, radius=100,
 
     if convolveSigma is not None:
         corrImg = scipy.ndimage.gaussian_filter(corrImg, sigma=convolveSigma)
-    
+
     # Doing this the expensive way: extract on full image, then trim
-    spots = sep.extract(corrImg, deblend_cont=1.0, 
+    spots = sep.extract(corrImg, deblend_cont=1.0,
                         thresh=thresh, mask=mask,
                         filter_kernel=kernel)
     spotsFrame = pd.DataFrame(spots)
@@ -828,32 +828,32 @@ def showPeaks(corrImg, spots, d, mask=None):
     d.set('frame delete all')
     d.set('frame new')
     d.set_np2arr(corrImg)
-    
+
     if mask is not None:
         d.set(f'array mask [xdim={mask.shape[1]},ydim={mask.shape[0]},bitpix="16"]', mask)
         d.set('mask transparency 75')
-    
+
     if spots is not None:
         spotSpecs = ['image']
         for s in spots:
             spotSpecs.append(r'ellipse {s["x"]} {s["y"]} {s["a"]} {s["b"]} {s["theta"] * 180/np.pi}')
 
         d.set('regions', ';'.join(spotSpecs))
-    
+
 def showPeaks2(corrImg, spots=None, nsig=3.0, imrad=100):
     f, pl = plt.subplots(figsize=(8,8))
     p1 = pl
-    
+
     mn = np.median(corrImg)
     sd = np.std(corrImg)
     if np.isscalar(nsig):
         lowSig = highSig = nsig, nsig
     else:
         lowSig, highSig = nsig
-    p1map = p1.imshow(corrImg, vmin=mn-sd*lowSig, vmax=mn+sd*highSig, 
+    p1map = p1.imshow(corrImg, vmin=mn-sd*lowSig, vmax=mn+sd*highSig,
                       aspect='equal')
     f.colorbar(p1map)
-    
+
     if spots is not None:
         for s in spots:
 
@@ -868,10 +868,10 @@ def showPeaks2(corrImg, spots=None, nsig=3.0, imrad=100):
 
         if len(spots) == 1:
             x, y = spots[0]['x'], spots[0]['y']
-        
+
             p1.set_xlim(x-imrad, x+imrad)
             p1.set_ylim(y-imrad, y+imrad)
-        
+
     return f
 
 def bestSpot(spots, ctr):
@@ -907,7 +907,7 @@ def getFocusGrid(center, spacing=2, r=5):
 def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
     focusReq = getFocusGrid(center, spacing=spacing, r=r)
     print(focusReq)
-    
+
     if focusReq[0] < 15:
         raise RuntimeError(f"focusReq[0] too low, not starting below: focusReq")
 
@@ -918,7 +918,7 @@ def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
         pfsutils.oneCmd(f'xcu_{cam}', f"motors move piston={f} abs microns")
         visit = takeRamp(cam=cam, nread=nread, comment=f'focus_sweep:{f}')
         visits.append(visit)
-        
+
     scanFrame = pd.DataFrame(dict(visit=visits, focus=focusReq))
 
     if measureCall is not None:
@@ -926,7 +926,7 @@ def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
             focusSet = measureCall(scanFrame)
             bestFocus, focusPoly = getBestFocus(focusSet)
             print(f"best focus: {bestFocus}")
-            if (bestFocus is not None and 
+            if (bestFocus is not None and
                 bestFocus >= focusReq[0] and
                 bestFocus <= focusReq[-1]):
 
@@ -1000,7 +1000,7 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
                radius=100, skipDone=True, ims=None, trimBad=True,
                convolveSigma=None, kernel=None, r0=0, r1=-1):
     """Measure the best spots in a DataFrame of images
-    
+
     Parameters
     ----------
     scans : `pd.DataFrame`
@@ -1015,7 +1015,7 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
         How far to look for a spot, by default 100
     skipDone : bool, optional
         Do not reprocess already measured rows, by default True
-    
+
     Returns
     -------
     [type]
@@ -1066,7 +1066,7 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
 
         corrImg, spots = getPeaks(corrImg,
                                   center=center_i, radius=radius,
-                                  thresh=thresh, 
+                                  thresh=thresh,
                                   mask=hxCalib.badMask,
                                   convolveSigma=convolveSigma,
                                   kernel=kernel)
@@ -1086,7 +1086,7 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
             scans.loc[scan_i, 'size'] =  (bestSpot.x2 + bestSpot.y2)/2
             scans.loc[scan_i, 'flux'] = bestSpot.flux
             scans.loc[scan_i, 'peak'] = bestSpot.peak
-    
+
     return scans
 
 def takeBareSpot(meade, nread=3, comment=None):
