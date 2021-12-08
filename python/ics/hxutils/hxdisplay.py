@@ -550,6 +550,7 @@ def dispMask(disp, alpha=0.5):
 
 def setMask(disp, badMask, alpha=0.75):
     disp.set('mask clear')
+    badMask = np.ascontiguousarray(badMask, dtype='i4')
     disp.set(f'array mask [xdim={badMask.shape[1]},ydim={badMask.shape[0]},bitpix=32]', badMask)
     dispMask(disp, alpha=alpha)
 
