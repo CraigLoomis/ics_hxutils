@@ -527,8 +527,7 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     
     return xreps, yreps
 
-def createDither(frames, hxCalib, rad=15, doNorm=False):
-
+def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
     scale = 3
     ctrIdx = (scale*scale+1)//2
     xsteps = frames['xstep'].unique()
@@ -553,7 +552,7 @@ def createDither(frames, hxCalib, rad=15, doNorm=False):
     outIms = []
     for f_i, fIdx in enumerate(frames.index):
         f1 = frames.loc[fIdx]
-        im = hxCalib.isr(int(f1.visit))
+        im = hxCalib.isr(int(f1.visit), r1=r1)
         im = im[yslice,xslice].astype('f4')
         maskedIm = im*bkgndMask
         bkgnd = np.median(maskedIm[np.where(maskedIm > 0)])
@@ -992,7 +991,7 @@ def scanForCrudeFocus(center, spacing=25, r=3, measureCall=None):
 
 def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
                radius=100, skipDone=True, ims=None, trimBad=True,
-               convolveSigma=None, kernel=None):
+               convolveSigma=None, kernel=None, r0=0, r1=-1):
     """Measure the best spots in a DataFrame of images
     
     Parameters
@@ -1053,10 +1052,10 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
             center_i = None
         else:
             if hxCalib is not None:
-                corrImg = hxCalib.isr(scans.loc[scan_i, 'visit'])
+                corrImg = hxCalib.isr(scans.loc[scan_i, 'visit'], r0=r0, r1=r1)
             else:
                 ramp = hxramp.HxRamp(visit=scans.loc[scan_i, 'visit'])
-                corrImg = ramp.cds()
+                corrImg = ramp.cdsN(r0=r0, r1=r1)
 
         corrImg, spots = getPeaks(corrImg,
                                   center=center_i, radius=radius,
