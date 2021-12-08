@@ -529,7 +529,9 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
 
 def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
     scale = 3
-    ctrIdx = (scale*scale+1)//2
+
+    frames = frames.sort_values('visit', ascending=True)
+    ctrIdx = (scale*scale)//2
     xsteps = frames['xstep'].unique()
     ysteps = frames['ystep'].unique()
     
