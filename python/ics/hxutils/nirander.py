@@ -547,10 +547,11 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
 
     outIm = np.zeros((rad*2*scale, rad*2*scale), dtype='f4')
     bkgndMask = np.ones((rad*2, rad*2), dtype='f4')
-    bkgndMask[rad-10:rad+11, rad-10:rad+11] = 0
+    bkgndMask[2:-2, 2:-1] = 0
     maskIm = hxCalib.badMask[yslice,xslice]
-    bkgndMask *= 1-maskIm
+    bkgndMask *= 1-(maskIm>0)
     print(f"{bkgndMask.sum()}/{bkgndMask.size}")
+    inIms = []
     outIms = []
     for f_i, fIdx in enumerate(frames.index):
         f1 = frames.loc[fIdx]
@@ -573,9 +574,13 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
               f'ctr: {f1.xpix:0.2f},{f1.ypix:0.2f} bkgnd: {bkgnd:0.3f} '
               f'scale: {normSum:0.1f}/{imSum:0.1f}={normSum/imSum:0.3f}')
         outIm[yoff::scale, xoff::scale] = im
-        outIms.append(im)
+        inIms.append(im)
 
-    return outIm, outIms
+        out1 = outIm*0
+        out1[yoff::scale, xoff::scale] = im
+        outIms.append(out1)
+
+    return outIm, inIms, outIms
 
 def ditherPath(butler, row, pfsDay=None):
     if pfsDay is None:
@@ -608,7 +613,7 @@ def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False):
     for i in range(len(frames)//9):
         dithFrames = frames.iloc[i*9:(i+1)*9]
         print(len(dithFrames))
-        dith1, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm)
+        dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm)
         dithers.append(dith1)
 
         if butler is not None:
@@ -624,8 +629,8 @@ def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False):
                    dict(name='FOCUS', value=row.focus),
                    dict(name='XPIX', value=row.xpix, comment="measured xc of 0,0 image"),
                    dict(name='YPIX', value=row.ypix, comment="measured yc of 0,0 image"),
-                   dict(name='XSTEP', value=row.xstep),
-                   dict(name='YSTEP', value=row.ystep),
+                   dict(name='XSTEP', value=int(row.xstep)),
+                   dict(name='YSTEP', value=int(row.ystep)),
                    dict(name='SIZE', value=row.size, comment="measured RMS of 0,0 image"),
                    dict(name='FLUX', value=row.flux, comment="measured total flux of 0,0 image"),
                    dict(name='PEAK', value=row.peak, comment="measured peak of 0,0 image")]
