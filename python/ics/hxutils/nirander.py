@@ -1084,50 +1084,6 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
     
     return scans
 
-def spotGridXXX(meade, butler, focus, waves=None, rows=None):
-    """Take a single image at a single focus at a grid of positions."""
-
-    if waves is None:
-        waves = meade.leds.wave
-    if np.isscalar(waves):
-        waves = [waves]
-
-    if np.isscalar(rows):
-        rows = [rows]
-    rows = np.array(rows, dtype='f4')
-
-    if np.isscalar(focus):
-        focus = [focus]
-    rows = np.array(rows, dtype='f4')
-
-    measRows = []
-    measFrame = []
-    try:
-        pfsutils.oneCmd('xcu_n1', f'motors move piston={focus} abs microns')
-        for w_i, w in enumerate(waves):
-            meade.led(w)
-            led, dutyCycle, _ = meade.ledState()
-            for r_i, row in enumerate(rows):
-                print(f"led {w} on row {row} with focus {focus}")
-                pos = meade.getTargetPosition(w, row)
-
-                meas = takeSpot(meade, pos=pos, comment=f'testGrid_{w}_{row}')
-                meas['focus'] = focus
-                measRows.append(meas)
-                measFrame = pd.concat(measRows, ignore_index=True)
-                if butler is not None:
-                    outFileName = writeMeasures(butler, measFrame)
-                    print(f"wrote {len(measFrame)} lines to {outFileName} at led {w} "
-                          f"on row {row} with focus {focus}")
-    except Exception as e:
-        print(f'oops: {e}')
-        # breakpoint()
-        raise
-    finally:
-        meade.ledsOff()
-
-    return measFrame
-
 def takeBareSpot(meade, nread=3, comment=None):
     """Lowest-level exposure which returns a dataframe with (visit, xstep, ystep, led) """
 
