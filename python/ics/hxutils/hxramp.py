@@ -644,12 +644,12 @@ class HxCalib(object):
         self.badMask = badMask
         self.darkStack = darkStack
 
-    def isr(self, visit, matchLevel=False, scaleLevel=False):
+    def isr(self, visit, matchLevel=False, scaleLevel=False, r0=0, r1=-1):
         path = rampPath(visit, cam=self.cam)
         _ramp = HxRamp(path)
 
         nreads = _ramp.nreads
-        cds = _ramp.cds()
+        cds = _ramp.cdsN(r0=r0, r1=r1)
 
         if self.darkStack is None:
             return cds
