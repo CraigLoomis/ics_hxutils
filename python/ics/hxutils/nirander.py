@@ -260,8 +260,9 @@ class GimbalIlluminator(Illuminator):
 
         # Ordered by increasing X _steps_, decreasing X _pixels_ (why did I say yes?!?)
         # Swapped back 2021-09 because it was stupid.
+        # Aim for 7000 in 3 reads.
         self.leds = pd.DataFrame(dict(wave=[1300, 1200, 1085, 1070, 1050, 970, 930],
-                                      dutyCycle=[100.0, 33, 30, 33, 19, 83, 40],
+                                      dutyCycle=[15.0, 5.0, 30, 33, 5, 15, 13],
                                       focusOffset=[4.0, 0, 0, 0, 0, 0, -10.0],
                                       position=[3984, 3664, 2700, 2457, 2274, 846, 100]))
         self.leds['position'] = 4096 - self.leds['position']
