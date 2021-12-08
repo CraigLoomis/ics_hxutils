@@ -555,7 +555,7 @@ def setMask(disp, badMask, alpha=0.75):
     dispMask(disp, alpha=alpha)
 
 def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=None,
-              zoom=8, scale='zscale', cam=None, lock=True, badMask=None):
+              zoom=8, scale='zscale', cam=None, lock=True, badMask=None, doOrder=True):
     """Show a grid of images centered on their spots."""
 
     if tileGrid is not None:
@@ -565,6 +565,8 @@ def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=No
     if len(df) > maxRows:
         raise ValueError(f"too many rows ({len(df)} > {maxRows}) -- increase maxRows if you really want")
 
+    #if doOrder:
+    #    df = df.sort_values([['xstep', 'ystep'], )
     if doClear:
         disp.set('frame delete all')
         disp.set('tile grid')
