@@ -573,7 +573,7 @@ def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=No
         disp.set(f'scale mode {scale}')
     if tileGrid is not None:
         disp.set(f'tile grid layout {tileGrid[0]} {tileGrid[1]}')
-        disp.set('tile grid direction y')
+        disp.set(f'tile grid direction x')
     else:
         disp.set('tile grid mode automatic')
 
@@ -627,8 +627,8 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7, badMask
     """Generate the canonical dither display: one page per wavelength, focus values per column."""
 
     waveDither = ditherSet[ditherSet.wavelength == wavelength].copy()
-    waveDither = waveDither.sort_values(['focus', 'ypix', 'visit'], ascending=[True, False, True])
-    waveGroups = waveDither.groupby(['wavelength', 'row', 'focus'], sort=False)
+    waveDither = waveDither.sort_values(['row', 'focus'], ascending=[False, True])
+    waveGroups = waveDither.groupby(['focus', 'row'], sort=False)
 
     nrows = len(waveDither.row.unique())
     nfocus = len(waveDither.focus.unique())
@@ -639,7 +639,7 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7, badMask
     disp.set(f'zoom to {zoom}')
     disp.set(f'scale mode {scale}')
     disp.set(f'tile grid layout {nfocus} {nrows}')
-    disp.set('tile grid direction y')
+    disp.set('tile grid direction x')
 
     disp.set('lock frame none')
 
@@ -648,17 +648,15 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7, badMask
         print(name, path)
 
         im, hdr = fitsio.read(path, header=True)
-        disp.set("frame new")
-        disp.set_np2arr(im)
-
         ctr = int(round(hdr['XPIX'])), int(round(hdr['YPIX']))
         rad = im.shape[0]//(3*2)
         xslice = slice(ctr[0]-rad, ctr[0]+rad)
         yslice = slice(ctr[1]-rad, ctr[1]+rad)
 
+        disp.set("frame new")
         if badMask is not None:
             imask = badMask[yslice, xslice]
-            print(f'{xslice}, {yslice}, {np.sum(imask)}')
             setMask(disp, imask)
+        disp.set_np2arr(im)
 
     return waveGroups
