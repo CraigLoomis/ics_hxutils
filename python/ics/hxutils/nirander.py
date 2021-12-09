@@ -187,24 +187,25 @@ class PlateIlluminator:
         self.dev.cmd(f'led {self._led} {dutyCycle}', debug=True)
 
 class Illuminator:
-    def __init__(self):
-        self._led = None
-        self._ledPower = None
-        self._ledChangeTime = None
+    def __init__(self, lampType='led'):
+        self._wave = None
+        self._power = None
+        self._changeTime = None
+        self._lampType = lampType
 
     def __str__(self):
-        return f"PlateIlluminator(led={self._led}@{self._ledPower})"
+        return f"Illuminator(type={self.lampType}: led={self._wave}@{self._power})"
 
     @property
     def dutyCycle(self):
-        return self._ledPower
+        return self._power
 
     def ledState(self):
-        if self._ledChangeTime is None:
+        if self._changeTime is None:
             dt = None
         else:
-            dt = time.time() - self._ledChangeTime
-        return (self._led, self._ledPower, dt)
+            dt = time.time() - self._changeTime
+        return (self._wave, self._power, dt)
 
     def ledOffTime(self):
         _led, _ledPower, dt = self.ledState()
@@ -216,15 +217,16 @@ class Illuminator:
 
     def ledsOff(self, debug=False):
         for w in self.leds.wave:
-            self.dev.cmd(f'led {w} 0', debug=debug)
-        self._led = 0
-        self._ledPower = 0
-        self._ledChangeTime = time.time()
+            self.dev.cmd(f'{self.lampType} {w} 0', debug=debug)
+        self._wave = 0
+        self._power = 0
+        self._changeTime = time.time()
 
     def led(self, wavelength, dutyCycle=None):
         # wavelength = int(wavelength)
-        if wavelength not in self.leds.wave.values:
-            raise ValueError(f"wavelength ({wavelength}) not in {self.leds.wave.to_list()}")
+        if self.lampType != 'mono':
+            if wavelength not in self.leds.wave.values:
+                raise ValueError(f"wavelength ({wavelength}) not in {self.leds.wave.to_list()}")
         if dutyCycle is None:
             dutyCycle = self.leds.dutyCycle[wavelength]
 
@@ -232,16 +234,16 @@ class Illuminator:
             raise ValueError(f"dutyCycle ({dutyCycle}) not in 0..100")
         dutyCycle = int(dutyCycle)
 
-        if self._led is None:
+        if self._wave is None:
             raise RuntimeError("current state of LEDs is unknown: need to call .ledsOff() before turning a LED on.")
-        if self._led in self.leds.wave and self._led != wavelength:
-            self.dev.cmd(f'led {self._led} 0', debug=True)
-            self._led = 0
-        self._led = wavelength
-        self._ledPower = dutyCycle
-        self._ledChangeTime = time.time()
+        if self._wave in self.leds.wave and self._wave != wavelength:
+            self.dev.cmd(f'{self.lampType} {self._wave} 0', debug=True)
+            self._wave = 0
+        self._wave = wavelength
+        self._power = dutyCycle
+        self._changeTime = time.time()
 
-        self.dev.cmd(f'led {self._led} {dutyCycle}', debug=True)
+        self.dev.cmd(f'led {self._wave} {dutyCycle}', debug=True)
 
 def getConfig(name):
     """Load a YAML configuration file.
@@ -255,9 +257,11 @@ def getConfig(name):
     return config
 
 class GimbalIlluminator(Illuminator):
-    def __init__(self, cam='n1', forceLedOff=True, logLevel=logging.INFO, ip=None):
+    def __init__(self, cam='n1', forceLedOff=True, logLevel=logging.INFO, ip=None,
+                 useMono=False):
 
-        Illuminator.__init__(self)
+        Illuminator.__init__(self, lampType='mono' if useMono else 'led')
+
         if ip is None:
             ip = 'gimbalpi'
         self.dev =  AidenPi('gimbal', ip, logLevel=logLevel)
@@ -269,14 +273,13 @@ class GimbalIlluminator(Illuminator):
 
         self._loadConfig()
 
-
         self.preloadDistance = 50
 
         if forceLedOff:
             self.ledsOff()
 
     def __str__(self):
-        return f"Meade(led={self._led}@{self._ledPower}, steps={self.getSteps()}, pix={self.getPix()})"
+        return f"Meade(led={self._wave}@{self._power}, steps={self.getSteps()}, pix={self.getPix()})"
 
     def _loadConfig(self, cfg):
         cfg = getConfig('JHU/nirCleanroom')
@@ -314,7 +317,7 @@ class GimbalIlluminator(Illuminator):
         # Ignores Y, which is wrong -- CPL
 
         if led is None:
-            led = self._led
+            led = self._wave
 
         return self.leds.position[led]
 
@@ -322,7 +325,7 @@ class GimbalIlluminator(Illuminator):
         # Ignores Y, which is wrong -- CPL
 
         if led is None:
-            led = self._led
+            led = self._wave
 
         return self.leds.loc[led]['focusOffset']
 
