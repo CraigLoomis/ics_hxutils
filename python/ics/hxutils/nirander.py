@@ -1,7 +1,9 @@
 from importlib import reload
 import logging
+import os.path
 import socket
 import time
+import yaml
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -241,7 +243,16 @@ class Illuminator:
 
         self.dev.cmd(f'led {self._led} {dutyCycle}', debug=True)
 
-nudges = dict(n1=dict())
+def getConfig(name):
+    """Load a YAML configuration file.
+
+    This should be in pfs_instdata or ics_utils -- CPL
+    """
+
+    with open(os.path.join(os.path.expandvars('$PFS_INSTDATA_DIR'),
+                           f'{name}.yaml'), 'rt') as cfgFile:
+        config = yaml.safe_load(cfgFile)
+    return config
 
 class GimbalIlluminator(Illuminator):
     def __init__(self, cam='n1', forceLedOff=True, logLevel=logging.INFO, ip=None):
@@ -256,19 +267,8 @@ class GimbalIlluminator(Illuminator):
         self.logger = logging.getLogger('meade')
         self.logger.setLevel(logLevel)
 
-        self._loadGeometry()
+        self._loadConfig()
 
-        # Ordered by increasing X _steps_, decreasing X _pixels_ (why did I say yes?!?)
-        # Swapped back 2021-09 because it was stupid.
-        # Aim for 7000 in 3 reads.
-        self.leds = pd.DataFrame(dict(wave=[1300, 1200, 1085, 1070, 1050, 970, 930],
-                                      dutyCycle=[15.0, 5.0, 30, 33, 5, 15, 13],
-                                      focusOffset=[4.0, 0, 0, 0, 0, 0, -10.0],
-                                      position=[3984, 3664, 2700, 2457, 2274, 846, 100]))
-        self.leds['position'] = 4096 - self.leds['position']
-
-        self.leds = self.leds.set_index('wave', drop=False)
-        self.nudges = nudges[cam]
 
         self.preloadDistance = 50
 
@@ -278,21 +278,22 @@ class GimbalIlluminator(Illuminator):
     def __str__(self):
         return f"Meade(led={self._led}@{self._ledPower}, steps={self.getSteps()}, pix={self.getPix()})"
 
-    def _loadGeometry(self):
-        # Measured after gimbal rebuild, on 2021-10-13
-        matrix = np.array([[ 7.31536530e-02,  3.25639510e-03, -1.72244744e+02],
-                           [ 1.09735634e-04,  1.90284246e-01, -4.73095848e+02],
-                           [-1.43293200e-08,  1.57991111e-06,  9.79020258e-01]])
-        # And after 2021-11-15 warmup:
-        matrix = np.array([[ 7.20637982e-02,  3.47643382e-03, -1.67991852e+02],
-                           [ 1.21767596e-04,  1.87499251e-01, -4.40704084e+02],
-                           [-1.94392780e-08,  1.55851941e-06,  9.78764126e-01]])
-        # Redo:
-        matrix =  np.array([[ 7.20562073e-02,  3.51050849e-03, -1.69401636e+02],
-                            [ 9.72181704e-05,  1.87569342e-01, -4.40832783e+02],
-                            [-2.99269899e-08,  1.58021944e-06,  9.78774959e-01]])
+    def _loadConfig(self, cfg):
+        cfg = getConfig('JHU/nirCleanroom')
+
+        matrix = cfg['geometry']['transformCoeffs']
         self.stepToPix = skimage.transform.ProjectiveTransform(matrix=matrix)
         self.pixToStep = self.stepToPix.inverse
+
+        self.leds = pd.DataFrame(cfg['leds'])
+        self.leds = self.leds.set_index('wave', drop=False)
+
+        self.mono = pd.DataFrame(cfg['mono'])
+        self.mono['position'] = self.mono.positionMM / 0.015 + 2048
+        self.mono = self.mono.set_index('wave', drop=False)
+
+        self.nudges = cfg['nudges'][self.cam]
+
 
     @classmethod
     def fitTransform(cls, scans):
