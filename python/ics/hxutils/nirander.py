@@ -216,7 +216,7 @@ class Illuminator:
             return dt
 
     def ledsOff(self, debug=False):
-        for w in self.leds.wave:
+        for w in self.lamps.wave:
             self.dev.cmd(f'{self.lampType} {w} 0', debug=debug)
         self._wave = 0
         self._power = 0
@@ -225,8 +225,8 @@ class Illuminator:
     def led(self, wavelength, dutyCycle=None):
         # wavelength = int(wavelength)
         if self.lampType != 'mono':
-            if wavelength not in self.leds.wave.values:
-                raise ValueError(f"wavelength ({wavelength}) not in {self.leds.wave.to_list()}")
+            if wavelength not in self.lamps.wave.values:
+                raise ValueError(f"wavelength ({wavelength}) not in {self.lamps.wave.to_list()}")
         if dutyCycle is None:
             dutyCycle = self.leds.dutyCycle[wavelength]
 
@@ -236,7 +236,7 @@ class Illuminator:
 
         if self._wave is None:
             raise RuntimeError("current state of LEDs is unknown: need to call .ledsOff() before turning a LED on.")
-        if self._wave in self.leds.wave and self._wave != wavelength:
+        if self._wave in self.lamps.wave and self._wave != wavelength:
             self.dev.cmd(f'{self.lampType} {self._wave} 0', debug=True)
             self._wave = 0
         self._wave = wavelength
@@ -260,11 +260,6 @@ class GimbalIlluminator(Illuminator):
     def __init__(self, cam='n1', forceLedOff=True, logLevel=logging.INFO, ip=None,
                  useMono=False):
 
-        Illuminator.__init__(self, lampType='mono' if useMono else 'led')
-
-        if ip is None:
-            ip = 'gimbalpi'
-        self.dev =  AidenPi('gimbal', ip, logLevel=logLevel)
 
         self.cam = cam
 
@@ -272,6 +267,15 @@ class GimbalIlluminator(Illuminator):
         self.logger.setLevel(logLevel)
 
         self._loadConfig()
+        if useMono:
+            self.lamps = self.mono
+        else:
+            self.lamps = self._leds
+        Illuminator.__init__(self, lampType='mono' if useMono else 'led')
+
+        if ip is None:
+            ip = 'gimbalpi'
+        self.dev =  AidenPi('gimbal', ip, logLevel=logLevel)
 
         self.preloadDistance = 50
 
@@ -288,9 +292,10 @@ class GimbalIlluminator(Illuminator):
         self.stepToPix = skimage.transform.ProjectiveTransform(matrix=matrix)
         self.pixToStep = self.stepToPix.inverse
 
-        self.leds = pd.DataFrame(cfg['leds'])
-        self.leds = self.leds.set_index('wave', drop=False)
+        self._leds = pd.DataFrame(cfg['leds'])
+        self._leds = self._leds.set_index('wave', drop=False)
 
+        # We get the monochrometer positions as mm from center of detector. Convert to pixels.
         self.mono = pd.DataFrame(cfg['mono'])
         self.mono['position'] = self.mono.positionMM / 0.015 + 2048
         self.mono = self.mono.set_index('wave', drop=False)
@@ -314,12 +319,12 @@ class GimbalIlluminator(Illuminator):
         self.pixToStep = self.stepToPix.inverse
 
     def ledPosition(self, y, led=None):
-        # Ignores Y, which is wrong -- CPL
+        """Return the column for this wavelength. Currently only supports a table of wavelengths. """
 
         if led is None:
             led = self._wave
 
-        return self.leds.position[led]
+        return self.lamps.position[led]
 
     def ledFocusOffset(self, y, led=None):
         # Ignores Y, which is wrong -- CPL
@@ -327,7 +332,7 @@ class GimbalIlluminator(Illuminator):
         if led is None:
             led = self._wave
 
-        return self.leds.loc[led]['focusOffset']
+        return self.lamps.loc[led]['focusOffset']
 
     def stepsToPix(self, steps):
         steps = np.array(steps)
@@ -384,13 +389,14 @@ class GimbalIlluminator(Illuminator):
         return self.stepsToPix([xNew, yNew])
 
     def getTargetPosition(self, wave, row):
-        """Get the final x,y pixel position for a wave+row. Applies a .nudge if opne exists. """
+        """Get the final x,y pixel position for a wave+row. Applies a .nudge if one exists. """
 
-        led = self.leds[self.leds.wave == wave]
+        led = self.lamps[self.lamps.wave == wave]
         col = int(led.position)
         pos = (col, row)
         try:
             pos = self.nudges[pos]
+            self.logger.info(f'nudge for ({wave}, {row}) to {pos}')
         except KeyError:
             pass
 
@@ -460,7 +466,7 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True)
             wavelength, dutyCycle = led
         meade.led(wavelength=wavelength, dutyCycle=dutyCycle)
         if xpos is None:
-            xpos = meade.leds.position[wavelength]
+            xpos = meade.lamps.position[wavelength]
 
     if np.isscalar(xpos):
         if np.isscalar(ypos):
