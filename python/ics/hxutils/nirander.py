@@ -902,19 +902,46 @@ def trimRect(im, c, r=100):
 
     return im2.copy()
 
+def rectMask(mask, center, radius=100):
+    """zero out pixels rectangularily further than radius from ctr. """
+
+    newMask = mask.copy()
+    ctrX = round(center[0])
+    ctrY = round(center[1])
+    preCount = mask.sum()
+    newMask[:max(0, (ctrY-radius)), :] = 1
+    newMask[min(4095, ctrY+radius):, :] = 1
+    newMask[:, :max(0, (ctrX-radius))] = 1
+    newMask[:, min(4095, (ctrX+radius)):] = 1
+    # logger.debug(f'{ctrX}, {ctrY}, {radius} {preCount} {newMask.sum()}')
+
+    return newMask
+
 def getPeaks(im, thresh=250.0, mask=None, center=None, radius=100,
-             convolveSigma=None, kernel=None):
-    bkgnd = sep.Background(im, mask=mask)
-    bkg = np.array(bkgnd)
+             convolveSigma=None, kernel=True):
+
+    if center is not None and mask is not None:
+        mask = rectMask(mask, center, radius)
+    bkgnd = sep.Background(im.astype('f4'), mask=mask)
+    bkg = bkgnd.back()
     corrImg = im - bkg
 
     if convolveSigma is not None:
         corrImg = scipy.ndimage.gaussian_filter(corrImg, sigma=convolveSigma)
 
     # Doing this the expensive way: extract on full image, then trim
-    spots = sep.extract(corrImg, deblend_cont=1.0,
-                        thresh=thresh, mask=mask,
-                        filter_kernel=kernel)
+    try:
+        argDict = dict(deblend_cont=1.0,
+                       thresh=thresh,
+                       mask=mask)
+        if kernel is not True:
+            argDict['filter_kernel'] = kernel
+
+        spots = sep.extract(corrImg, **argDict)
+    except Exception as e:
+        logger.warning(f'getPeaks failed: {e}')
+        return corrImg, None
+
     spotsFrame = pd.DataFrame(spots)
     spotsFrame['ellipticity'] = spotsFrame.x2 / spotsFrame.y2
     spotsFrame.loc[spotsFrame.ellipticity < 1,
@@ -1144,7 +1171,7 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
     else:
         notDone = scans.index
 
-    for scan_i in notDone:
+    for i_i, scan_i in enumerate(notDone):
         if center is False:
             center_i = None
         elif center is None:
@@ -1165,21 +1192,32 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
             center_i = center
 
         if ims is not None:
-            corrImg = ims[scan_i]
-            center_i = None
+            corrImg = ims[i_i]
+            if center is None:
+                center_i = None
         else:
             if hxCalib is not None:
                 corrImg = hxCalib.isr(scans.loc[scan_i, 'visit'], r0=r0, r1=r1)
+#                if remask:
+#                    path = hxramp.rampPath(visit=scans.loc[scan_i, 'visit'])
+#                    data0 = hxRamp.HxRamp(path).dataN(0)
+
             else:
                 ramp = hxramp.HxRamp(visit=scans.loc[scan_i, 'visit'])
                 corrImg = ramp.cdsN(r0=r0, r1=r1)
 
-        corrImg, spots = getPeaks(corrImg,
-                                  center=center_i, radius=radius,
-                                  thresh=thresh,
-                                  mask=hxCalib.badMask,
-                                  convolveSigma=convolveSigma,
-                                  kernel=kernel)
+        try:
+            corrImg, spots = getPeaks(corrImg,
+                                      center=center_i, radius=radius,
+                                      thresh=thresh,
+                                      mask=hxCalib.badMask,
+                                      convolveSigma=convolveSigma,
+                                      kernel=kernel)
+        except Exception as e:
+            logger.warning(f'getPeaks failed: {e}')
+            corrImg = None
+            spots = []
+
         if trimBad and len(spots) > 0:
             ok = (spots.size < 150) & (spots.ellipticity < 5.0)
             origSpots = spots.copy()
