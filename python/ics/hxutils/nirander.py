@@ -482,11 +482,15 @@ class GimbalIlluminator(Illuminator):
 
         led = self.lamps[self.lamps.wave == wave]
         col = int(led.position)
+        nudgeKey = str((int(wave), int(row)))
         pos = (col, row)
         try:
-            pos = self.nudges[pos]
-            self.logger.info(f'nudge for ({wave}, {row}) to {pos}')
+            nudge = self.nudges[nudgeKey]
+            pos2 = (pos[0] + nudge[0], pos[1] + nudge[1])
+            self.logger.info(f'nudge for {nudgeKey}: {pos} to {pos2}')
+            pos = pos2
         except KeyError:
+            self.logger.debug(f'no nudge for {nudgeKey}, going to {pos}')
             pass
 
         return pos
