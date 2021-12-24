@@ -103,7 +103,7 @@ class AidenPi(object):
                     break
                 t1 = time.time()
                 if t1-t0 > maxTime:
-                    self.logger.fatal(f"reply timeed out after {t1-t0} seconds")
+                    self.logger.fatal(f"reply timed out after {t1-t0} seconds")
                     break
                 time.sleep(0.1)
 
@@ -128,12 +128,12 @@ class PlateIlluminator:
         self._ledPower = None
         self._ledChangeTime = None
 
-        self.leds = pd.DataFrame(dict(wave=['1070-0.75','1070-1','1070-1.5','1070-2','1070-2.7','1070-4'],
+        self.lamps = pd.DataFrame(dict(wave=['1070-0.75','1070-1','1070-1.5','1070-2','1070-2.7','1070-4'],
                                       dutyCycle=[33, 33, 33, 33, 33, 33]))
-        self.leds = self.leds.set_index('wave', drop=False)
+        self.lamps = self.lamps.set_index('wave', drop=False)
 
         if forceLedOff:
-            self.ledsOff()
+            self.lampsOff()
 
     def __str__(self):
         return f"PlateIlluminator(led={self._led}@{self._ledPower})"
@@ -158,7 +158,7 @@ class PlateIlluminator:
             return dt
 
     def ledsOff(self, debug=False):
-        for w in self.leds.wave:
+        for w in self.lamps.wave:
             self.dev.cmd(f'led {w} 0', debug=debug)
         self._led = 0
         self._ledPower = 0
@@ -166,18 +166,18 @@ class PlateIlluminator:
 
     def led(self, wavelength, dutyCycle=None):
         # wavelength = int(wavelength)
-        if wavelength not in self.leds.wave.values:
-            raise ValueError(f"wavelength ({wavelength}) not in {self.leds.wave.to_list()}")
+        if wavelength not in self.lamps.wave.values:
+            raise ValueError(f"wavelength ({wavelength}) not in {self.lamps.wave.to_list()}")
         if dutyCycle is None:
-            dutyCycle = self.leds.dutyCycle[wavelength]
+            dutyCycle = self.lamps.dutyCycle[wavelength]
 
         if dutyCycle < 0 or dutyCycle > 100:
             raise ValueError(f"dutyCycle ({dutyCycle}) not in 0..100")
         dutyCycle = int(dutyCycle)
 
         if self._led is None:
-            raise RuntimeError("current state of LEDs is unknown: need to call .ledsOff() before turning a LED on.")
-        if self._led in self.leds.wave and self._led != wavelength:
+            raise RuntimeError("current state of LEDs is unknown: need to call .lampsOff() before turning a LED on.")
+        if self._led in self.lamps.wave and self._led != wavelength:
             self.dev.cmd(f'led {self._led} 0', debug=True)
             self._led = 0
         self._led = wavelength
@@ -187,11 +187,10 @@ class PlateIlluminator:
         self.dev.cmd(f'led {self._led} {dutyCycle}', debug=True)
 
 class Illuminator:
-    def __init__(self, lampType='led'):
+    def __init__(self):
         self._wave = None
         self._power = None
         self._changeTime = None
-        self._lampType = lampType
 
     def __str__(self):
         return f"Illuminator(type={self.lampType}: led={self._wave}@{self._power})"
@@ -215,12 +214,26 @@ class Illuminator:
         else:
             return dt
 
-    def ledsOff(self, debug=False):
-        for w in self.lamps.wave:
-            self.dev.cmd(f'{self.lampType} {w} 0', debug=debug)
+    def lampsOff(self, debug=True):
+        if self.lampType == 'mono':
+            self.dev.cmd('mono off', debug=debug)
+        else:
+            for w in self.lamps.wave:
+                self.dev.cmd(f'{self.lampType} {w} 0', debug=debug)
         self._wave = 0
         self._power = 0
         self._changeTime = time.time()
+
+    def _monoOn(self, wavelength, dutyCycle=100):
+        self.dev.cmd(f'mono {self._wave}', debug=True)
+        self.dev.cmd(f'mono on', debug=True)
+
+        self._wave = wavelength
+        self._power = dutyCycle
+        self._changeTime = time.time()
+
+    def _ledOn(self, wavelength, dutyCycle=None):
+        pass
 
     def led(self, wavelength, dutyCycle=None):
         # wavelength = int(wavelength)
@@ -228,24 +241,51 @@ class Illuminator:
             if wavelength not in self.lamps.wave.values:
                 raise ValueError(f"wavelength ({wavelength}) not in {self.lamps.wave.to_list()}")
         if dutyCycle is None:
-            dutyCycle = self.leds.dutyCycle[wavelength]
+            dutyCycle = self.lamps.dutyCycle[wavelength]
+        if self.lampType == 'mono':
+            if dutyCycle != 100:
+                raise ValueError('monochrometer duty cycle is not controllable')
 
         if dutyCycle < 0 or dutyCycle > 100:
             raise ValueError(f"dutyCycle ({dutyCycle}) not in 0..100")
         dutyCycle = int(dutyCycle)
 
         if self._wave is None:
-            raise RuntimeError("current state of LEDs is unknown: need to call .ledsOff() before turning a LED on.")
+            raise RuntimeError("current state of LEDs is unknown: need to call .lampsOff() before turning a LED on.")
         if self._wave in self.lamps.wave and self._wave != wavelength:
-            self.dev.cmd(f'{self.lampType} {self._wave} 0', debug=True)
+            if self.lampType == 'mono':
+                self.dev.cmd('mono off')
+            else:
+                self.dev.cmd(f'{self.lampType} {self._wave} 0', debug=True)
             self._wave = 0
+
         self._wave = wavelength
         self._power = dutyCycle
         self._changeTime = time.time()
 
-        self.dev.cmd(f'led {self._wave} {dutyCycle}', debug=True)
+        if self.lampType == 'mono':
+            self.dev.cmd(f'mono {self._wave}', debug=True)
+            self.dev.cmd(f'mono on', debug=True)
+        else:
+            self.dev.cmd(f'{self.lampType} {self._wave} {dutyCycle}', debug=True)
 
-def getConfig(name):
+class LedControl(Illuminator):
+    pass
+class Mono:
+    def __init__(self):
+        self._wave = 0
+        self._power = 0
+        self._changeTime = None
+
+    def lampStatus(self):
+        if self._changeTime is None:
+            dt = None
+        else:
+            dt = time.time() - self._changeTime
+
+        ret = self.dev.cmd('mono ?')
+        return (self._wave, self._power, dt, ret)
+
     """Load a YAML configuration file.
 
     This should be in pfs_instdata or ics_utils -- CPL
@@ -257,21 +297,22 @@ def getConfig(name):
     return config
 
 class GimbalIlluminator(Illuminator):
-    def __init__(self, cam='n1', forceLedOff=True, logLevel=logging.INFO, ip=None,
-                 useMono=False):
+    knownLampTypes = {'led', 'mono'}
 
+    def __init__(self, cam='n1', forceLedOff=True, logLevel=logging.INFO, ip=None,
+                 lampType='led'):
 
         self.cam = cam
 
         self.logger = logging.getLogger('meade')
         self.logger.setLevel(logLevel)
 
+        if lampType not in self.knownLampTypes:
+            raise ValueError(f'unknown lamptype {lampType}: need {self.knownLampTypes}')
+        self.lampType = lampType
+
         self._loadConfig()
-        if useMono:
-            self.lamps = self.mono
-        else:
-            self.lamps = self._leds
-        Illuminator.__init__(self, lampType='mono' if useMono else 'led')
+        Illuminator.__init__(self)
 
         if ip is None:
             ip = 'gimbalpi'
@@ -280,10 +321,10 @@ class GimbalIlluminator(Illuminator):
         self.preloadDistance = 50
 
         if forceLedOff:
-            self.ledsOff()
+            self.lampsOff()
 
     def __str__(self):
-        return f"Meade(led={self._wave}@{self._power}, steps={self.getSteps()}, pix={self.getPix()})"
+        return f"Gimbalator(type={self.lampType}, led={self._wave}@{self._power}, steps={self.getSteps()}, pix={self.getPix()})"
 
     def _loadConfig(self, cfg):
         cfg = getConfig('JHU/nirCleanroom')
@@ -502,7 +543,7 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True)
             callRet.append(ret)
 
     if led is not None:
-        meade.ledsOff()
+        meade.lampsOff()
 
     if call is None:
         return pd.concat(callRet, ignore_index=True)
