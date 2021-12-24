@@ -286,13 +286,14 @@ class Mono:
         ret = self.dev.cmd('mono ?')
         return (self._wave, self._power, dt, ret)
 
+def getConfig(name, subdirectory=''):
     """Load a YAML configuration file.
 
     This should be in pfs_instdata or ics_utils -- CPL
     """
 
     with open(os.path.join(os.path.expandvars('$PFS_INSTDATA_DIR'),
-                           f'{name}.yaml'), 'rt') as cfgFile:
+                           'config', subdirectory, f'{name}.yaml'), 'rt') as cfgFile:
         config = yaml.safe_load(cfgFile)
     return config
 
@@ -326,12 +327,30 @@ class GimbalIlluminator(Illuminator):
     def __str__(self):
         return f"Gimbalator(type={self.lampType}, led={self._wave}@{self._power}, steps={self.getSteps()}, pix={self.getPix()})"
 
-    def _loadConfig(self, cfg):
-        cfg = getConfig('JHU/nirCleanroom')
+    def _resolveTransform(self, transformName):
+        """Given a fully resolved transform class name, get the class or detonate."""
+        parts = transformName.split('.')
+        ns_o = globals()
+        for p in parts:
+            if isinstance(ns_o, dict):
+                ns_o = ns_o[p]
+            else:
+                ns_o = getattr(ns_o, p)
+        return ns_o
 
-        matrix = cfg['geometry']['transformCoeffs']
-        self.stepToPix = skimage.transform.ProjectiveTransform(matrix=matrix)
-        self.pixToStep = self.stepToPix.inverse
+    def _loadConfig(self):
+        cfg = getConfig('nirCleanroom', subdirectory='JHU')
+
+        transformClass = self._resolveTransform(cfg['geometry']['transformClass'])
+        coeffs = cfg['geometry']['transformCoeffs']
+        if isinstance(coeffs, (list, tuple)):
+            assert len(coeffs) == 2, "lists of coeffs be len=2"
+
+            self._stepToPix = transformClass(np.array(coeffs[0]))
+            self._pixToStep = transformClass(np.array(coeffs[1]))
+        else:
+            self._stepToPix = transformClass(np.array(coeffs))
+            self._pixToStep = self._stepToPix.inverse
 
         self._leds = pd.DataFrame(cfg['leds'])
         self._leds = self._leds.set_index('wave', drop=False)
@@ -341,31 +360,59 @@ class GimbalIlluminator(Illuminator):
         self.mono['position'] = self.mono.positionMM / 0.015 + 2048
         self.mono = self.mono.set_index('wave', drop=False)
 
+        # The keys are strings containing a pair: "(940, 2040)"
+        # We do not eval here but encode when indexing.
         self.nudges = cfg['nudges'][self.cam]
-
+        self.logger.info(f'nudges: {self.nudges}')
+        if self.lampType == 'mono':
+            self.lamps = self.mono
+        else:
+            self.lamps = self._leds
 
     @classmethod
-    def fitTransform(cls, scans):
-        t =  skimage.transform.ProjectiveTransform()
+    def fitTransform(cls, scans, transform=None, transformArgs=None):
+        if transform is None:
+            transform = skimage.transform.PolynomialTransform
+        t = transform()
+
+        if transformArgs is None:
+            transformArgs = dict()
+            if transform == skimage.transform.PolynomialTransform:
+                transformArgs['order'] = 3
 
         src = scans[['xstep', 'ystep']].values.astype('f4')
         dst = scans[['xpix', 'ypix']].values.astype('f4')
-        t.estimate(src, dst)
+        t.estimate(src, dst, **transformArgs)
 
-        return t
+        # Polynomial xform has no inverse. Need to fit both ways.
+        if transform != skimage.transform.PolynomialTransform:
+            return t
 
-    def setTransform(self, transform):
-        matrix =  transform.params
-        self.stepToPix = skimage.transform.ProjectiveTransform(matrix=matrix)
-        self.pixToStep = self.stepToPix.inverse
+        tinv = transform()
+        tinv.estimate(dst, src, **transformArgs)
 
-    def ledPosition(self, y, led=None):
+        return t, tinv
+
+    def setTransform(self, transforms):
+        try:
+            t, tinv = transforms
+        except:
+            t = transforms
+            tinv =  None
+
+        self._stepToPix = t.__class__(t.params)
+        if tinv is None:
+            self._pixToStep = self._stepToPix.inverse
+        else:
+            self._pixToStep = tinv.__class__(tinv.params)
+
+    def ledPosition(self, y, wave=None):
         """Return the column for this wavelength. Currently only supports a table of wavelengths. """
 
-        if led is None:
-            led = self._wave
+        if wave is None:
+            wave = self._wave
 
-        return self.lamps.position[led]
+        return self.lamps.position[wave]
 
     def ledFocusOffset(self, y, led=None):
         # Ignores Y, which is wrong -- CPL
@@ -380,7 +427,7 @@ class GimbalIlluminator(Illuminator):
         upDim = steps.ndim < 2
         if upDim:
             steps = np.atleast_2d(steps)
-        pix = self.stepToPix(steps)
+        pix = self._stepToPix(steps)
         return pix[0] if upDim else pix
 
     def pixToSteps(self, pix):
@@ -388,8 +435,9 @@ class GimbalIlluminator(Illuminator):
         upDim = pix.ndim < 2
         if upDim:
             pix = np.atleast_2d(pix)
-        steps = np.round(self.pixToStep(pix)).astype('i4')
+        steps = np.round(self._pixToStep(pix)).astype('i4')
         return steps[0] if upDim else steps
+
     def getSteps(self):
         xPos = int(self.dev.cmd('/1?0'))
         yPos = int(self.dev.cmd('/2?0'))
