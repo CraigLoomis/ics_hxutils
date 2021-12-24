@@ -993,15 +993,22 @@ def brightestSpot(spots):
         return spots[i:i+1]
     return None
 
-def getBestFocus(sweep):
+def getPolyMin(sweep, xname, yname):
     sweep = sweep.dropna()
-    x = sweep.sort_values(by='focus')['focus']
-    y = sweep.sort_values(by='focus')['size']
+    x = sweep.sort_values(by=xname)[xname]
+    y = sweep.sort_values(by=xname)[yname]
 
-    poly = np.polynomial.Polynomial.fit(x,y,2)
-    c,b,a = poly.convert().coef
-    minx = -b/(2*a)
+    if len(x) == 1:
+        minx = x.values[0]
+        poly = np.polynomial.Polynomial([y.values[0]/x.values[0]])
+    else:
+        poly = np.polynomial.Polynomial.fit(x,y,min(2, len(x)))
+        c,b,a = poly.convert().coef
+        minx = -b/(2*a)
     return minx, poly
+
+def getBestFocus(sweep):
+    return getPolyMin(sweep, 'focus', 'size')
 
 def getFocusGrid(center, spacing=2, r=5):
     focusReq = center + (np.arange(2*r-1) - (r-1))*spacing
