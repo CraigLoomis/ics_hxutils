@@ -690,17 +690,17 @@ def ditherPath(butler, row, pfsDay=None):
         path = butler.get('dither',
                           idDict=dict(visit=int(row.visit),
                                       wave=int(row.wavelength),
-                                      focus=row.focus,
-                                      row=(np.round(row.ypix/100)*100)))
+                                      focus=int(row.focus),
+                                      row=int(row.row)))
+        return path
     else:
         path = butler.search('dither',
                              idDict=dict(visit=int(row.visit),
                                          wave=int(row.wavelength),
-                                         focus=row.focus,
-                                         row=(np.round(row.ypix/100)*100)),
+                                         focus=int(row.focus),
+                                         row=int(row.row)),
                              pfsDay=pfsDay)
-
-    return path
+        return path[0]
 
 def ditherPaths(butler, rows, pfsDay='*'):
     paths = []
@@ -724,7 +724,7 @@ def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False):
             idDict = dict(visit=int(row.visit),
                           wave=int(row.wavelength),
                           focus=row.focus,
-                          row=(np.round(row.ypix/100)*100))
+                          row=int(row.row))
             ids.append(idDict)
             path = butler.get('dither', idDict=idDict)
             hdr = [dict(name='VISIT', value=int(row.visit), comment="visit of 0,0 image"),
