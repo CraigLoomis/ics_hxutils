@@ -832,11 +832,11 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
         return ditherList
 
 def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
-            doDither=False, nread=3):
+            doDither=False, nread=3, doWindow=False, windowWidth=50):
     """Primary acquisition routine."""
 
     if waves is None:
-        waves = meade.leds.wave
+        waves = meade.lamps.wave
     if np.isscalar(waves):
         waves = [waves]
 
@@ -855,6 +855,15 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
             led, dutyCycle, _ = meade.ledState()
             for r_i, row in enumerate(rows):
                 pos = meade.getTargetPosition(w, row)
+                if doWindow:
+                    if pos[1] <= windowWidth-4 or pos[1] >= (4092-windowWidth):
+                        raise ValueError(f'row window too close to edge: {pos}')
+
+                    skipToWindow = int(pos[1]) - windowWidth - 4
+                    skipToTopRef = 4092 - (int(pos[1]) + windowWidth)
+                    pfsutils.oneCmd('hx_n1',
+                                    f'setRowSkipping skipSequence=4,{skipToWindow},{2*windowWidth},'
+                                    f'{skipToTopRef},{2*windowWidth + 8}')
                 if not doDither:
                     meade.moveToPix(*pos, preload=True)
                 for f_i, f in enumerate(focus):
@@ -869,6 +878,7 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
                     except Exception as e:
                         raise
 
+                    meas['row'] = row
                     meas['focus'] = f
                     meas['wavelength'] = w
                     meas['dutyCycle'] = dutyCycle
