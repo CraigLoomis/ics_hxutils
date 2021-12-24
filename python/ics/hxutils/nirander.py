@@ -1187,13 +1187,18 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
         if spots is None or len(spots) == 0:
             print(f"nope: i={scan_i}, scan={scans.loc[scan_i]}")
         else:
-            print(f"    : i={scan_i}, visit={scans.loc[scan_i, 'visit']}, nspots={len(spots)}")
+            # remeasure, using the windowed routines:
+            # sep.winpos()
             bestSpot = spots.loc[spots.flux.idxmax()]
+            print(f"    : i={scan_i}, visit={scans.loc[scan_i, 'visit']}, nspots={len(spots)} ({bestSpot.x:0.2f}, {bestSpot.y:0.2f})")
             scans.loc[scan_i, 'xpix'] = bestSpot.x
             scans.loc[scan_i, 'ypix'] = bestSpot.y
             scans.loc[scan_i, 'x2'] = bestSpot.x2
             scans.loc[scan_i, 'y2'] = bestSpot.y2
-            scans.loc[scan_i, 'size'] =  (bestSpot.x2 + bestSpot.y2)/2
+            scans.loc[scan_i, 'size'] = 2*np.sqrt(bestSpot.x2 + bestSpot.y2)
+            scans.loc[scan_i, 'a'] = bestSpot.a
+            scans.loc[scan_i, 'b'] = bestSpot.b
+            scans.loc[scan_i, 'size_ab'] =  2*np.sqrt(bestSpot.a + bestSpot.b)
             scans.loc[scan_i, 'flux'] = bestSpot.flux
             scans.loc[scan_i, 'peak'] = bestSpot.peak
 
