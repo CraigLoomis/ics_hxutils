@@ -35,5 +35,9 @@ dataMap['waveGrid'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimen
 dataMap['focusGrid'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
                             "focusGrid-{focus:03.0f}-{cam}.fits")
 
+dataMap['rawMeasures'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
+                              "rawMeasures-{visit:06d}-{cam}.txt")
 dataMap['measures'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
                            "measures-{visit:06d}-{cam}.txt")
+dataMap['ditherMeasures'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
+                               "ditherMeasures-{visit:06d}-{cam}.txt")
