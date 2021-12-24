@@ -631,6 +631,7 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     return xreps, yreps
 
 def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
+
     scale = 3
 
     frames = frames.sort_values('visit', ascending=True)
@@ -710,13 +711,13 @@ def ditherPaths(butler, rows, pfsDay='*'):
         paths.append(path)
     return paths
 
-def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False):
+def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False, r1=-1):
     dithers = []
     ids = []
     for i in range(len(frames)//9):
         dithFrames = frames.iloc[i*9:(i+1)*9]
         print(len(dithFrames))
-        dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm)
+        dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm, r1=r1)
         dithers.append(dith1)
 
         if butler is not None:
@@ -748,7 +749,7 @@ def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
     if npos%2 != 1:
         raise ValueError("not willing to deal with non-odd dithering")
     rad = npos//2
-    xc, yc = meade.pixToSteps([meade.leds.position[led], row])
+    xc, yc = meade.pixToSteps([meade.lamps.position[led], row])
     x0, y0 = xc-(rad*xsteps), yc-(rad*ysteps)
 
     xx = x0 + np.arange(npos)*xsteps
@@ -780,7 +781,7 @@ def ditherAtPix(meade, pos, npos=3, nread=3, xsteps=5, ysteps=2):
 def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
               nramps=1, takeDarks=False):
     if waves is None:
-        waves = meade.leds.wave
+        waves = meade.lamps.wave
     if np.isscalar(waves):
         waves = [waves]
 
@@ -797,8 +798,8 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
         for w_i, w in enumerate(waves):
             for r_i, row in enumerate(rows):
                 if takeDarks:
-                    meade.ledsOff()
-                    xc, yc = meade.pixToSteps([meade.leds.position[w], row])
+                    meade.lampsOff()
+                    xc, yc = meade.pixToSteps([meade.lamps.position[w], row])
                     meade.moveToSteps(xc, yc, preload=True)
                     # Take and save a fresh dark
                     dark = takeSuperDark(meade, force=True, nread=3, nexp=5)
@@ -821,15 +822,20 @@ def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
                     print("ditherList: ", len(ditherList))
                     rowFrame =  pd.concat(ditherList, ignore_index=True)
                     if butler is not None:
-                        outFileName = writeMeasures(butler, rowFrame)
+                        outFileName = writeRawMeasures(butler, rowFrame)
                         print(f"wrote {len(rowFrame)} lines to {outFileName} at led {w} on row {row} with focus {f}")
     except Exception as e:
         print(f'oops: {e}')
         # breakpoint()
         raise
     finally:
-        meade.ledsOff()
+        meade.lampsOff()
         return ditherList
+
+def rowForPix(ypix):
+    row = np.round(ypix/100)*100
+
+    return row
 
 def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
             doDither=False, nread=3, doWindow=False, windowWidth=50):
@@ -886,7 +892,7 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
 
                     rowFrame = pd.concat(spotList, ignore_index=True)
                     if butler is not None:
-                        outFileName = writeMeasures(butler, rowFrame)
+                        outFileName = writeRawMeasures(butler, rowFrame)
                         print(f"wrote {len(rowFrame)} lines to {outFileName} "
                               f"at led {w} on row {row} with focus {f}")
     except Exception as e:
@@ -894,17 +900,29 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
         # breakpoint()
         raise
     finally:
-        meade.ledsOff()
+        meade.lampsOff()
+        if doWindow:
+            pfsutils.oneCmd('hx_n1', 'clearRowSkipping')
 
     return pd.concat(spotList, ignore_index=True)
 
-def writeMeasures(butler, df):
-    outFileName = butler.getPath('measures', idDict=dict(visit=df.visit.min()))
+def _writeMeasures(butler, df, measureType):
+    outFileName = butler.getPath(measureType,
+                                 idDict=dict(visit=df.visit.min()))
     outFileName.parent.mkdir(mode=0o2775, parents=True, exist_ok=True)
     with open(outFileName, mode='w') as outf:
         outf.write(df.to_string())
 
     return outFileName
+
+def writeRawMeasures(butler, df):
+    return _writeMeasures(butler, df, 'rawMeasures')
+
+def writeSpotMeasures(butler, df):
+    return _writeMeasures(butler, df, 'measures')
+
+def writeDitherMeasures(butler, df):
+    return _writeMeasures(butler, df, 'ditherMeasures')
 
 def trimRect(im, c, r=100):
     cx, cy = c
@@ -1129,7 +1147,7 @@ def focusSweep(meade, led=None, pix=None, centerFocus=None, spacing=10, r=5, mea
                              measureCall=measureCall)
 
     if doLedOff:
-        meade.ledsOff()
+        meade.lampsOff()
 
     focusScan['wavelength'] = wavelength
     focusScan['xstep'] = xstep
@@ -1143,9 +1161,9 @@ def scanForFocus(center, spacing=5, r=4, measureCall=None):
 def scanForCrudeFocus(center, spacing=25, r=3, measureCall=None):
     return _scanForFocus(center, spacing=spacing, r=r, measureCall=measureCall)
 
-def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
-               radius=100, skipDone=True, ims=None, trimBad=True,
-               convolveSigma=None, kernel=None, r0=0, r1=-1):
+def measureSet(scans, meade=None, hxCalib=None, thresh=150, center=None,
+               radius=10, skipDone=True, ims=None, trimBad=True, doClear=False,
+               convolveSigma=None, kernel=True, remask=False, r0=0, r1=-1):
     """Measure the best spots in a DataFrame of images
 
     Parameters
@@ -1173,7 +1191,7 @@ def measureSet(scans, meade, hxCalib=None, thresh=1000, center=None,
         hxCalib = hxramp.HxCalib()
 
     for f in 'x2', 'y2', 'xpix', 'ypix', 'flux', 'peak', 'size':
-        if f not in scans:
+        if f not in scans or doClear:
             scans[f] = np.nan
 
     if skipDone:
@@ -1277,5 +1295,5 @@ def takeSpot(meade, pos=None, focus=None, light=None, nread=3, comment=None):
         df['focus'] = focus
 
     if light is not None:
-        meade.ledsOff()
+        meade.lampsOff()
     return df
