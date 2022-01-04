@@ -163,7 +163,37 @@ def selectDithers(rows, *, wavelength=None, row=None, focus=None):
 
     return dithers.reset_index(drop=True)
 
-def measureDithers(butler, rows, thresh=250, radius=5, hxcalib=None, pfsDay='*'):
+def measureDithers(butler, rows, thresh=50,
+                   radius=30, searchRadius=10,
+                   hxcalib=None, pfsDay='*'):
+    """Center up and measure dithers
+
+    Parameters
+    ----------
+    butler : `butler.Butler`
+        How to get ands save data
+    rows : `pd.DataFrame`
+        a DataFrame for the *dithers*, not the spots.
+    thresh : int, optional
+        Detection threshold, by default 250. Should be restated in terms of bg sigma.
+    radius : int, optional
+        The size of the patch we measure, by default 30 5um pixels
+    searchRadius : int, optional
+        How far we look to find a peak, by default 10 5um pixels
+    hxcalib : `hxramp.HxCalib`, optional
+        Used for basic ISR, by default None
+    pfsDay : str, optional
+        Where the butler should search for dithers, by default '*'
+
+    Returns
+    -------
+    meas : `pd.DataFrame`
+        The measurements of the centered spots.
+    centeredSpots : image
+        The spot images after re-centering.
+    rawSpots : image
+        The spot images before re-centering
+    """
     rawDithers = []
     centeredDithers = []
     centeredPeaks = []
@@ -173,8 +203,12 @@ def measureDithers(butler, rows, thresh=250, radius=5, hxcalib=None, pfsDay='*')
         dither, hdr = fitsio.read(path, header=True)
         rawDithers.append(dither)
 
-        ctr = (np.array(dither.shape) + 1) // 2
-        meas = nirander.measureSet(row, center=ctr, radius=radius, ims=[dither],
+        ditherCtr = (np.array(dither.shape)[::-1] + 1) // 2
+        ctrX = ditherCtr[1]
+        ctrY = ditherCtr[0]
+        meas = nirander.measureSet(row, center=ditherCtr,
+                                   radius=radius, searchRadius=searchRadius,
+                                   ims=[dither],
                                    hxCalib=hxcalib,  thresh=thresh, doClear=True)
         if len(meas) != 1:
             raise RuntimeError(f"{len(meas)} peaks for {path}: {meas}")
@@ -183,11 +217,27 @@ def measureDithers(butler, rows, thresh=250, radius=5, hxcalib=None, pfsDay='*')
             centeredDithers.append(None)
             continue
 
-        ctrX = int(np.round(meas.xpix.values[0]))
-        ctrY = int(np.round(meas.ypix.values[0]))
-        ctr = ctrX, ctrY
-        dx = ctrX - meas.xpix.values[0]
-        dy = ctrY - meas.ypix.values[0]
+        measX = meas.xpix.values[0]
+        measY = meas.ypix.values[0]
+        dx = ditherCtr[0] - measX
+        dy = ditherCtr[1] - measY
+
+        if abs(dx) >= 1:
+            pixDist = int(abs(dx))
+            if dx < 0:
+                dither[:, :-pixDist] = dither[:, pixDist:]
+                dx += pixDist
+            else:
+                dither[:, pixDist:] = dither[:, :-pixDist]
+                dx -= pixDist
+        if abs(dy) >= 1:
+            pixDist = int(abs(dy))
+            if dy < 0:
+                dither[:-pixDist, :] = dither[pixDist:, :]
+                dy += pixDist
+            else:
+                dither[pixDist:, :] = dither[:-pixDist, :]
+                dy -= pixDist
 
         centeredDither = shiftSpot(dither, dx, dy)[0]
         peaks = nirander.measureSet(meas, center=ctr, radius=radius, ims=[centeredDither],
@@ -209,6 +259,8 @@ def measureDithers(butler, rows, thresh=250, radius=5, hxcalib=None, pfsDay='*')
             peaks['ee1'] = ee1 / peaks.flux.values[0]
             peaks['ee3'] = ee3 / peaks.flux.values[0]
             peaks['ee5'] = ee5 / peaks.flux.values[0]
+
+            nirander.writeDither(peaks, butler, centeredDither)
 
         centeredDithers.append(centeredDither)
         centeredPeaks.append(peaks)
