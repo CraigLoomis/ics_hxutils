@@ -469,16 +469,22 @@ def dispSizes(df, atFocus=None, focusRange=None, title=None):
     spotees = pd.DataFrame(mm, columns=['wave', 'row', 'ee1', 'ee3', 'ee5', 'size'])
     spotees['focus'] = atFocus
 
-    plots = (('ee1', 0.085, [0.05, 0.1]),
-             ('ee3', 0.544, [0.30, 0.7]),
-             ('ee5', 0.907, [0.70, 1.0]))
+    def _makePlotRange(name, req, under=0.5, over=1.1):
+        return (name, req, [req*under, req*over])
+
+    plots = (_makePlotRange('ee1', 0.085),
+             _makePlotRange('ee3', 0.544),
+             _makePlotRange('ee5', 0.907),
+             _makePlotRange('size', 18.9, under=1.5, over=0.9))
     for p_i, (name, requirement, plotRange) in enumerate(plots):
-        dispPlane(spotees, name, req=requirement, plotRange=plotRange, pl=pl[p_i])
-    dispFocusPlane(df, focusCenter=atFocus, focusRange=focusRange, pl=pl[-1])
+        dispPlane(spotees, name, req=requirement, plotRange=plotRange, pl=pl[p_i], label='mean of BEST')
+    # dispFocusPlane(df, focusCenter=atFocus, focusRange=focusRange, pl=pl[-1])
 
     # Hack-y cleanup
     pl[0].set_xlabel('')
     pl[1].set_xlabel('')
+
+    pl[1].set(xlabel='')
     pl[1].set_ylabel('')
 
     if title is None:
