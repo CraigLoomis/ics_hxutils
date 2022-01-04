@@ -26,10 +26,10 @@ dataMap['isr'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName
 dataMap['postageStamp'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
                                "ps-{visit:06d}-{cam}.fits")
 dataMap['dither'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
-                         "dither-{wave:04.0f}_{row:04.0f}_{focus:03.0f}_{visit:06d}-{cam}.fits")
+                         "dither-{wavelength:04.0f}_{row:04.0f}_{focus:03.0f}_{visit:06d}-{cam}.fits")
 
 dataMap['repeatsGrid'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
-                              "repeatsGrid-{wave:04.0f}_{row:04.0f}-{cam}.fits")
+                              "repeatsGrid-{wavelength:04.0f}_{row:04.0f}-{cam}.fits")
 dataMap['waveGrid'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
                            "waveGrid-{wave:04.0f}-{cam}.fits")
 dataMap['focusGrid'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"

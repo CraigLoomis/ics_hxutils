@@ -520,6 +520,8 @@ def takeSuperDark(meade, nexp=3, nread=3, force=False, cam='n1'):
     return superDark
 
 def takeRamp(cam, nread, nreset=1, exptype="test", comment="no_comment", quiet=True):
+    if isinstance(comment, str):
+        comment = comment.replace(' ', '_')
     pfsutils.oneCmd(f'hx_{cam}', f'ramp nread={nread} exptype={exptype} objname=\"{comment}\"',
                     quiet=quiet)
     visit = hxramp.pathToVisit(hxramp.lastRamp(cam=cam))
@@ -541,6 +543,8 @@ def moveFocus(cam, piston):
 
 def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True):
     """Move to the given positions and acquire spots.
+
+    This can be used to acquire dithers or a larger grid of spots.
 
     Args
     ----
@@ -696,18 +700,18 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
 
 def ditherPath(butler, row, pfsDay=None):
     if pfsDay is None:
-        path = butler.get('dither',
-                          idDict=dict(visit=int(row.visit),
-                                      wave=int(row.wavelength),
-                                      focus=int(row.focus),
-                                      row=int(row.row)))
+        idDict = dict(visit=int(row.visit),
+                      wavelength=int(row.wavelength),
+                      focus=int(row.focus),
+                      row=int(row.row))
+        path = butler.getPath('dither', idDict=idDict)
         return path
     else:
-        path = butler.search('dither',
-                             idDict=dict(visit=int(row.visit),
-                                         wave=int(row.wavelength),
-                                         focus=int(row.focus),
-                                         row=int(row.row)),
+        idDict = dict(visit=int(row.visit),
+                      wavelength=int(row.wavelength),
+                      focus=int(row.focus),
+                      row=int(row.row))
+        path = butler.search('dither', idDict=idDict,
                              pfsDay=pfsDay)
         return path[0]
 
@@ -789,7 +793,8 @@ def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
 
     visits = []
     for r_i in range(nramps):
-        gridVisits = motorScan(meade, xx, yy, led=led, posInPixels=False)
+        gridVisits = motorScan(meade, xx, yy, led=led, nread=nread,
+                               posInPixels=False)
         visits.extend(gridVisits)
 
     return pd.concat(visits, ignore_index=True)
@@ -849,10 +854,14 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
     if np.isscalar(waves):
         waves = [waves]
 
+    if rows is None:
+        raise ValueError("rows must be specified, either a scalar or a list of positions.")
     if np.isscalar(rows):
         rows = [rows]
     rows = np.array(rows, dtype='f4')
 
+    if focus is None:
+        raise ValueError("focus must be specified, either a scalar or a list of values.")
     if np.isscalar(focus):
         focus = [focus]
     focus = np.array(focus, dtype='f4')
@@ -861,7 +870,7 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
     try:
         for w_i, w in enumerate(waves):
             meade.led(w)
-            led, dutyCycle, _ = meade.ledState()
+            _, dutyCycle, _ = meade.ledState()
             for r_i, row in enumerate(rows):
                 pos = meade.getTargetPosition(w, row)
                 if doWindow:
@@ -880,9 +889,9 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
                     moveFocus(meade.cam, f)
                     try:
                         if doDither:
-                            meas = ditherAtPix(meade, pos=pos, nread=3)
+                            meas = ditherAtPix(meade, pos=pos, nread=nread)
                         else:
-                            meas = takeBareSpot(meade, nread=3,
+                            meas = takeBareSpot(meade, nread=nread,
                                                 comment=f'spotSet_{w}_{round(row)}_{round(f)}')
                     except Exception as e:
                         raise
@@ -1174,7 +1183,7 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=150, center=None,
     Parameters
     ----------
     scans : `pd.DataFrame`
-        [description]
+        DataFrame with at least visit,xstep,ystep.
     hxCalib : `HxCalib`
         An object which can .isr() an image.
     thresh : int, optional
@@ -1276,7 +1285,7 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=150, center=None,
 
     return scans
 
-def takeBareSpot(meade, nread=3, comment=None):
+def takeBareSpot(meade, nread=3, comment="no_comment"):
     """Lowest-level exposure which returns a dataframe with (visit, xstep, ystep, led) """
 
     visit = takeRamp(cam=meade.cam, nread=nread, exptype='object', comment=comment)
@@ -1284,7 +1293,7 @@ def takeBareSpot(meade, nread=3, comment=None):
 
     return df
 
-def takeSpot(meade, pos=None, focus=None, light=None, nread=3, comment=None):
+def takeSpot(meade, pos=None, focus=None, light=None, nread=3, comment="no_comment"):
     """Lowest-level exposure which optionally sets focus/led/gimbal and returns a dataframe. """
 
     if pos is not None:
