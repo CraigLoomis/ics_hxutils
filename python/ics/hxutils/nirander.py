@@ -778,68 +778,39 @@ def ditherAtPix(meade, pos, npos=3, nread=3, xsteps=5, ysteps=2):
 
     return ditherVisits
 
-def ditherSet(meade, butler=None, waves=None, rows=[88,2040,3995], focus=122.0,
-              nramps=1, takeDarks=False):
-    if waves is None:
-        waves = meade.lamps.wave
-    if np.isscalar(waves):
-        waves = [waves]
-
-    if np.isscalar(rows):
-        rows = [rows]
-    rows = np.array(rows, dtype='f4')
-
-    if np.isscalar(focus):
-        focus = [focus]
-    focus = np.array(focus, dtype='f4')
-
-    ditherList = []
-    try:
-        for w_i, w in enumerate(waves):
-            for r_i, row in enumerate(rows):
-                if takeDarks:
-                    meade.lampsOff()
-                    xc, yc = meade.pixToSteps([meade.lamps.position[w], row])
-                    meade.moveToSteps(xc, yc, preload=True)
-                    # Take and save a fresh dark
-                    dark = takeSuperDark(meade, force=True, nread=3, nexp=5)
-                    nirButler.put(dark, 'dark', dict(visit=dark.visit0))
-                meade.led(w)
-                led, dutyCycle, _ = meade.ledState()
-                for f_i, f in enumerate(focus):
-                    print(f"led {w} on row {row} with focus {f}")
-                    pfsutils.oneCmd('xcu_n1', f'motors move piston={f} abs microns')
-                    try:
-                        ret = ditherAt(meade, w, row, nramps=nramps)
-                    except Exception as e:
-                        raise
-
-                    ret['focus'] = f
-                    ret['wavelength'] = w
-                    ret['dutyCycle'] = dutyCycle
-                    ditherList.append(ret)
-
-                    print("ditherList: ", len(ditherList))
-                    rowFrame =  pd.concat(ditherList, ignore_index=True)
-                    if butler is not None:
-                        outFileName = writeRawMeasures(butler, rowFrame)
-                        print(f"wrote {len(rowFrame)} lines to {outFileName} at led {w} on row {row} with focus {f}")
-    except Exception as e:
-        print(f'oops: {e}')
-        # breakpoint()
-        raise
-    finally:
-        meade.lampsOff()
-        return ditherList
-
-def rowForPix(ypix):
-    row = np.round(ypix/100)*100
-
-    return row
-
 def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
             doDither=False, nread=3, doWindow=False, windowWidth=50):
-    """Primary acquisition routine."""
+    """Primary acquisition routine: takes a (wave, row, focus) grid of spots or dithers
+
+    Parameters
+    ----------
+    meade : `GimbalIlluminator`
+        The object which controls lamps and moves the gimbalator.
+    butler : `butler.Butler`, optional
+        Path/file wrapper, by default None
+    waves : float or list of floats, optional
+        wavelength to take spots at. By default uses all the defined lamps.
+    rows : float or list of floats
+        rows to take stops at. Not really optional.
+    focus : float or list of floats
+        FPA focus position to take spots at. Not really optional
+    doDither : bool, optional
+        Whether to take a 3x3 point dither, by default False
+    nread : int, optional
+        Numbers of H4 reads to take per spot, by default 3
+    doWindow : bool, optional
+        Whether to window using the H4 row skipping option, by default False
+    windowWidth : int, optional
+        If doWindow=True, the "radius" of the window, by default 50.
+
+    Returns
+    -------
+    spotFrame : `pd.DataFrame`
+        The essentials for the acquisition: visit, motors steps, focus, nominal row, wavelength.
+
+    The spotFrame is saved to a butler-curated location.
+
+    """
 
     if waves is None:
         waves = meade.lamps.wave
