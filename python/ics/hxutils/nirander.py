@@ -896,7 +896,7 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
                     except Exception as e:
                         raise
 
-                    meas['row'] = row
+                    meas['row'] = int(row)
                     meas['focus'] = f
                     meas['wavelength'] = w
                     meas['dutyCycle'] = dutyCycle
