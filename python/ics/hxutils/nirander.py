@@ -719,6 +719,46 @@ def ditherPaths(butler, rows, pfsDay='*'):
         paths.append(path)
     return paths
 
+def writeDither(row, butler, dithIm):
+    """Save a dither and measurements to disk
+
+    Parameters
+    ----------
+    row : `pd.DataFrame`
+        The measurements for the dither
+    butler : `nirander.Butler`
+        Knows where to save files.
+    dithIm : image
+        The dither itself.
+    """
+    idDict = dict(visit=int(row.visit),
+                  wavelength=int(row.wavelength),
+                  focus=int(row.focus),
+                  row=int(row.row))
+    path = butler.get('dither', idDict=idDict)
+    hdr = [dict(name='VISIT', value=int(row.visit), comment="visit of 0,0 image"),
+            dict(name='WAVE', value=float(row.wavelength)),
+            dict(name='FOCUS', value=float(row.focus)),
+            dict(name='ROW', value=int(row.row), comment="rounded row number, for easy grouping"),
+            dict(name='XPIX', value=float(row.xpix), comment="measured xc of 0,0 image"),
+            dict(name='YPIX', value=float(row.ypix), comment="measured yc of 0,0 image"),
+            dict(name='SIZE', value=float(row.size), comment="measured RMS of 0,0 image"),
+            dict(name='X2', value=float(row.x2), comment="measured 2nd moment"),
+            dict(name='Y2', value=float(row.y2), comment="measured 2nd moment"),
+            dict(name='FLUX', value=float(row.flux), comment="measured total flux of 0,0 image"),
+            dict(name='PEAK', value=float(row.peak), comment="measured peak of 0,0 image")]
+    try:
+        hdr.extend([dict(name='EE1', value=float(row.ee1), comment="EE of central pixel"),
+                    dict(name='EE3', value=float(row.ee3), comment="EE of central 3 pixel box"),
+                    dict(name='EE5', value=float(row.ee5), comment="EE of central 5 pixel box")])
+    except:
+        raise
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fitsio.write(path, dithIm, header=hdr, clobber=True)
+    logger.info(f'wrote dither {path}')
+
+    return idDict
+
 def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False, r1=-1):
     dithers = []
     ids = []
@@ -730,26 +770,10 @@ def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False, r1=-1):
 
         if butler is not None:
             row = dithFrames.iloc[0]
-            idDict = dict(visit=int(row.visit),
-                          wave=int(row.wavelength),
-                          focus=row.focus,
-                          row=int(row.row))
+            idDict = writeDither(row, butler, dith1)
             ids.append(idDict)
-            path = butler.get('dither', idDict=idDict)
-            hdr = [dict(name='VISIT', value=int(row.visit), comment="visit of 0,0 image"),
-                   dict(name='WAVE', value=row.wavelength),
-                   dict(name='FOCUS', value=row.focus),
-                   dict(name='XPIX', value=row.xpix, comment="measured xc of 0,0 image"),
-                   dict(name='YPIX', value=row.ypix, comment="measured yc of 0,0 image"),
-                   dict(name='XSTEP', value=int(row.xstep)),
-                   dict(name='YSTEP', value=int(row.ystep)),
-                   dict(name='SIZE', value=row.size, comment="measured RMS of 0,0 image"),
-                   dict(name='FLUX', value=row.flux, comment="measured total flux of 0,0 image"),
-                   dict(name='PEAK', value=row.peak, comment="measured peak of 0,0 image")]
-            path.parent.mkdir(parents=True, exist_ok=True)
-            fitsio.write(path, dith1, header=hdr, clobber=True)
-            logger.info(f'wrote dither {path}')
-    return ids
+
+    return pd.DataFrame(ids)
 
 def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
     """Acquire dithered imaged at a given position. """
