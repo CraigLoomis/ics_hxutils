@@ -527,9 +527,17 @@ def takeRamp(cam, nread, nreset=1, exptype="test", comment="no_comment", quiet=T
     return visit
 
 def moveFocus(cam, piston):
-    """Move the FPA focus."""
+    """Move the FPA focus. Honors any defined tilts.
 
-    pfsutils.oneCmd(f'xcu_{cam}', f'motors move piston={piston} abs microns')
+    Parameters
+    ----------
+    cam : `str`
+        Camera name, like "n1"
+    piston : `float`
+        Absolute focus position, in microns.
+    """
+
+    pfsutils.oneCmd(f'xcu_{cam}', f'motors moveFocus microns={piston}')
 
 def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True):
     """Move to the given positions and acquire spots.
@@ -845,7 +853,7 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
                     meade.moveToPix(*pos, preload=True)
                 for f_i, f in enumerate(focus):
                     print(f"led {w} on row {row} with focus {f}")
-                    pfsutils.oneCmd('xcu_n1', f'motors move piston={f} abs microns')
+                    moveFocus(meade.cam, f)
                     try:
                         if doDither:
                             meas = ditherAtPix(meade, pos=pos, nread=3)
@@ -1047,11 +1055,11 @@ def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
     if focusReq[0] < 15:
         raise RuntimeError(f"focusReq[0] too low, not starting below: focusReq")
 
-    pfsutils.oneCmd(f'xcu_{cam}', f"motors move piston={focusReq[0]-10} abs microns")
+    moveFocus(cam, focusReq[0]-10)
 
     visits = []
     for f in focusReq:
-        pfsutils.oneCmd(f'xcu_{cam}', f"motors move piston={f} abs microns")
+        moveFocus(cam, f)
         visit = takeRamp(cam=cam, nread=nread, comment=f'focus_sweep:{f}')
         visits.append(visit)
 
@@ -1066,7 +1074,7 @@ def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
                 bestFocus >= focusReq[0] and
                 bestFocus <= focusReq[-1]):
 
-                pfsutils.oneCmd(f'xcu_{cam}', f"motors move piston={bestFocus} abs microns")
+                moveFocus(cam, bestFocus)
                 visit = takeRamp(cam=cam, nread=nread, comment=f'at_best_focus:{bestFocus}')
                 visits.append(visit)
 
@@ -1255,7 +1263,7 @@ def takeSpot(meade, pos=None, focus=None, light=None, nread=3, comment=None):
     if pos is not None:
         meade.moveToPix(*pos)
     if focus is not None:
-        pfsutils.oneCmd('xcu_n1', f'motors move piston={focus} abs microns')
+        moveFocus(meade.cam, focus)
     if light is not None:
         if np.isscalar(light):
             meade.led(light)
