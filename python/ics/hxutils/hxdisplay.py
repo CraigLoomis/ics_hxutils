@@ -521,8 +521,80 @@ def setMask(disp, badMask, alpha=0.75):
     disp.set(f'array mask [xdim={badMask.shape[1]},ydim={badMask.shape[0]},bitpix=32]', badMask)
     dispMask(disp, alpha=alpha)
 
+def tweakDisp(disp, zoom=None, center=None, tileGrid=None,
+              lockImage=None, lockScale=None,
+              scaleType=None, scaleLimits=None,
+              doRun=True):
+
+    ds9Cmds = []
+
+    if tileGrid is not None:
+        if tileGrid is False:
+            ds9Cmds.append('tile no')
+            ds9Cmds.append('tile grid mode automatic')
+        else:
+            if tileGrid is True:
+                ds9Cmds.append('tile grid mode automatic')
+            else:
+                ds9Cmds.append(f'tile grid layout {tileGrid[0]} {tileGrid[1]}')
+                ds9Cmds.append(f'tile grid direction x')
+            ds9Cmds.append('tile mode grid')
+            ds9Cmds.append('tile yes')
+
+    if zoom is not None:
+        ds9Cmds.append(f'zoom to {zoom}')
+    if center is not None:
+        ds9Cmds.append(f'pan to {center[0]} {center[1]}')
+
+    if scaleType is not None:
+        ds9Cmds.append(f'scale {scaleType}')
+    if scaleLimits is not None:
+        if isinstance(scaleLimits, str):
+            ds9Cmds.append(f'scale mode {scaleLimits}')
+        else:
+            ds9Cmds.append(f'scale limits {scaleLimits[0]} {scaleLimits[1]}')
+
+    if lockImage is not None:
+        if lockImage:
+            ds9Cmds.append('lock frame image')
+        else:
+            ds9Cmds.append('lock frame none')
+    if lockScale is not None:
+        if lockScale:
+            ds9Cmds.append('lock frame scalelimits yes')
+            ds9Cmds.append('lock frame scalelimits yes')
+        else:
+            ds9Cmds.append('lock frame scalelimits no')
+            ds9Cmds.append('lock frame scale no')
+
+    if doRun:
+        disp.set('; '.join(ds9Cmds))
+    else:
+        return ds9Cmds
+
+def setupDisp(disp, doClear=True, zoom=8, tileGrid=None,
+              lockImage=True, lockScale=True,
+              scaleType='asinh', scaleLimits=None):
+
+    ds9Cmds = []
+    if doClear:
+        ds9Cmds.append('frame delete all')
+        ds9Cmds.append('tile grid')
+        ds9Cmds.append('tile yes')
+
+    if tileGrid is None:
+        tileGrid = True
+
+    moreCmds = tweakDisp(disp, zoom=zoom, tileGrid=tileGrid,
+                         lockImage=lockImage, lockScale=lockScale,
+                         scaleType=scaleType, scaleLimits=scaleLimits,
+                         doRun=False)
+    ds9Cmds.extend(moreCmds)
+    ds9CmdStr = '; '.join(ds9Cmds)
+    disp.set(ds9CmdStr)
+
 def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=None,
-              zoom=8, cam=None, lock=True, badMask=None, doOrder=True,
+              zoom=8, cam=None, lockImage=False, lockScale=True, badMask=None, doOrder=True,
               scaleType='asinh', scaleLimits=None):
     """Show a grid of images centered on their spots."""
 
@@ -535,28 +607,11 @@ def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=No
 
     if doOrder:
         df = df.sort_values(by=['row', 'wavelength'],
-                            ascending=[False, True])
-    if doClear:
-        disp.set('frame delete all')
-        disp.set('tile grid')
-        disp.set('tile yes')
-        disp.set(f'zoom to {zoom}')
-        disp.set(f'scale {scaleType}')
-        if scaleLimits is not None:
-            if isinstance(scaleLimits, str):
-                disp.set(f'scale mode {scaleLimits}')
-            else:
-                disp.set(f'scale limits {scaleLimits[0]} {scaleLimits[1]}')
-    if tileGrid is not None:
-        disp.set(f'tile grid layout {tileGrid[0]} {tileGrid[1]}')
-        disp.set(f'tile grid direction x')
-    else:
-        disp.set('tile grid mode automatic')
+                            ascending=[False, False])
 
-    if lock:
-        disp.set('lock frame image')
-    else:
-        disp.set('lock frame none')
+    setupDisp(disp, doClear=doClear, zoom=zoom, tileGrid=tileGrid,
+              lockImage=lockImage, lockScale=lockScale,
+              scaleType=scaleType, scaleLimits=scaleLimits)
 
     for i, row in df.iterrows():
         disp.set('frame new')
@@ -566,12 +621,15 @@ def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=No
         disp.set_np2arr(cds)
         if badMask is not None:
             setMask(disp, badMask)
-        if not lock:
+        if not lockImage:
             xpix, ypix = getPix(row, meade)
             disp.set(f'pan to {xpix} {ypix} image')
             logger.info(f'{row.wavelength} {row["row"]:0.1f} {xpix:0.2f} {ypix:0.2f}')
+        else:
+            logger.info(f'{row.wavelength} {row.row}, {row.focus}')
 
-    if lock: # Assume they are all at the same place
+
+    if lockImage: # Assume they are all at the same place
         row = df.head(1).squeeze()
         xpix, ypix = getPix(row, meade)
         disp.set(f'pan to {xpix} {ypix} image')
@@ -592,14 +650,15 @@ def ditherName(butler, group, pfsDay='*'):
         row = row[0]
 
     key = dict(focus=focus,
-               wave=group.wavelength.unique()[0],
+               wavelength=group.wavelength.unique()[0],
                visit=group.visit.min(),
                row=row)
 
     path = butler.search('dither', pfsDay=pfsDay, **key)
     return path[0]
 
-def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7, scaleType='linear',
+def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7,
+                scaleType='asinh', scaleLimits=None, lockImage=True,
                 badMask=None, pfsDay='*'):
     """Generate the canonical dither display: one page per wavelength, focus values per column."""
 
@@ -610,17 +669,9 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7, scaleTy
     nrows = len(waveDither.row.unique())
     nfocus = len(waveDither.focus.unique())
 
-    disp.set('frame delete all')
-    disp.set('tile grid')
-    disp.set('tile yes')
-    disp.set(f'zoom to {zoom}')
-    disp.set(f'scale {scaleType}')
-    disp.set(f'scale mode {scale}')
-    disp.set(f'tile grid layout {nfocus} {nrows}')
-    disp.set('tile grid direction x')
-
-    disp.set('lock frame none')
-    disp.set('lock frame scalelimits yes')
+    setupDisp(disp, doClear=True, zoom=zoom, tileGrid=(nfocus, nrows),
+              lockImage=False, lockScale=True,
+              scaleType=scaleType, scaleLimits=scaleLimits)
 
     for name, group in waveGroups:
         path = ditherName(butler, group, pfsDay=pfsDay)
@@ -640,7 +691,8 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7, scaleTy
 
     return waveGroups
 
-def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8, scale=99.7, scaleType='linear',
+def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8, scale=99.7,
+                       scaleType='asinh', scaleLimits=None,
                 badMask=None, pfsDay='*'):
     """Generate a single-focus dither display"""
 
@@ -651,17 +703,7 @@ def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8, scale=99.7, scale
     nrows = len(focusDither.row.unique())
     nwaves = len(focusDither.wavelength.unique())
 
-    disp.set('frame delete all')
-    disp.set('tile grid')
-    disp.set('tile yes')
-    disp.set(f'zoom to {zoom}')
-    disp.set(f'scale {scaleType}')
-    disp.set(f'scale mode {scale}')
-    disp.set(f'tile grid layout {nwaves} {nrows}')
-    disp.set('tile grid direction x')
-
-    disp.set('lock frame none')
-    disp.set('lock frame scalelimits yes')
+    setupDisp(disp, zoom=zoom, scaleType=scaleType, scaleLimits=scaleLimits)
 
     for name, group in waveGroups:
         path = ditherName(butler, group, pfsDay=pfsDay)
