@@ -401,14 +401,13 @@ def dispFocusPlane(df, focusCenter=None, focusRange=None, pl=None, cmapName='RdB
     return f
 
 def dispPlane(df, name, req=None, plotRange=None, pl=None,
-              markersize=300, cmapName='seismic'):
+              markersize=300, cmapName='seismic', label='mean'):
     if pl is None:
         f, pl = plt.subplots(figsize=(10,8))
     else:
         f = pl.figure
     # pl.set_aspect('equal')
 
-    cmap = plt.get_cmap(cmapName)
     if req is None:
         req = df[name].mean()
 
@@ -437,7 +436,7 @@ def dispPlane(df, name, req=None, plotRange=None, pl=None,
     pl.yaxis.set_major_locator(yticks)
     pl.set_xlabel('wavelength')
     pl.set_ylabel('row')
-    pl.set_title(f'{name} mean={df[name].mean():0.3f}')
+    pl.set_title(f'{name}, {label}={df[name].mean():0.3f}')
 
     cb = plt.colorbar(o, ax=pl, fraction=0.1, pad=0.01, format='%0.3f')
     cb.ax.axhline(y=req, c='k')
@@ -456,14 +455,18 @@ def dispSizes(df, atFocus=None, focusRange=None, title=None):
                          sharex=True, sharey=False, squeeze=False)
     pl = pl.flatten()
 
-    spotFrame = df.loc[df.focus == atFocus]
+    if atFocus is None:
+        spotFrame = df
+    else:
+        spotFrame = df.loc[df.focus == atFocus]
     grps = spotFrame.sort_values(['wavelength', 'row'],
                                  ascending=[False, False]).groupby(['wavelength', 'row'],
                                                                    sort=False)
     mm = []
     for name,grp in grps:
-        mm.append((name[0], name[1], grp.ee1.max(), grp.ee3.max(), grp.ee5.max()))
-    spotees = pd.DataFrame(mm, columns=['wave', 'row', 'ee1', 'ee3', 'ee5'])
+        mm.append((name[0], name[1], grp.ee1.max(), grp.ee3.max(), grp.ee5.max(),
+                   grp['size'].min()))
+    spotees = pd.DataFrame(mm, columns=['wave', 'row', 'ee1', 'ee3', 'ee5', 'size'])
     spotees['focus'] = atFocus
 
     plots = (('ee1', 0.085, [0.05, 0.1]),
@@ -479,6 +482,8 @@ def dispSizes(df, atFocus=None, focusRange=None, title=None):
     pl[1].set_ylabel('')
 
     if title is None:
+        if atFocus is None:
+            atFocus = "BEST FOR EACH"
         title = f'dithers from visit={df.visit.min()} at focus={atFocus}'
     f.suptitle(title, size='x-large')
     f.tight_layout()
