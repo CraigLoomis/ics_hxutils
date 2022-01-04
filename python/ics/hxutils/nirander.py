@@ -924,7 +924,8 @@ def rectMask(mask, center, radius=100):
 
     return newMask
 
-def getPeaks(im, thresh=250.0, mask=None, center=None, radius=100,
+def getPeaks(im, thresh=250.0, mask=None, center=None, radius=10,
+             searchRadius=5,
              convolveSigma=None, kernel=True):
 
     if center is not None and mask is not None:
@@ -956,7 +957,7 @@ def getPeaks(im, thresh=250.0, mask=None, center=None, radius=100,
                                                      'ellipticity']
     if center is not None:
         center = np.atleast_2d(center)
-        keep_w = cdist(spotsFrame[["x","y"]], center) <= radius
+        keep_w = cdist(spotsFrame[["x","y"]], center) <= searchRadius
         spotsFrame = spotsFrame.loc[keep_w]
 
     return corrImg, spotsFrame
@@ -1141,8 +1142,9 @@ def scanForCrudeFocus(center, spacing=25, r=3, measureCall=None):
     return _scanForFocus(center, spacing=spacing, r=r, measureCall=measureCall)
 
 def measureSet(scans, meade=None, hxCalib=None, thresh=150, center=None,
-               radius=10, skipDone=True, ims=None, trimBad=True, doClear=False,
-               convolveSigma=None, kernel=True, remask=False, r0=0, r1=-1):
+               radius=10, searchRadius=5, skipDone=True, ims=None, trimBad=True, doClear=False,
+               convolveSigma=None, kernel=True, remask=False,
+               rawSpots=False, r0=0, r1=-1):
     """Measure the best spots in a DataFrame of images
 
     Parameters
@@ -1216,6 +1218,7 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=150, center=None,
         try:
             corrImg, spots = getPeaks(corrImg,
                                       center=center_i, radius=radius,
+                                      searchRadius=searchRadius,
                                       thresh=thresh,
                                       mask=hxCalib.badMask,
                                       convolveSigma=convolveSigma,

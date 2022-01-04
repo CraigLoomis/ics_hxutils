@@ -240,8 +240,10 @@ def measureDithers(butler, rows, thresh=50,
                 dy -= pixDist
 
         centeredDither = shiftSpot(dither, dx, dy)[0]
-        peaks = nirander.measureSet(meas, center=ctr, radius=radius, ims=[centeredDither],
-                                   hxCalib=hxcalib, thresh=thresh, doClear=True)
+        peaks = nirander.measureSet(meas, center=ditherCtr,
+                                    radius=radius, searchRadius=searchRadius,
+                                    ims=[centeredDither],
+                                    hxCalib=hxcalib, thresh=thresh, doClear=True)
         # _, peaks = nirander.getPeaks(dith, center=ctr, radius=5)
         if len(peaks) != 1:
             raise RuntimeError(f"{len(peaks)} peaks for {path}: {peaks}")
