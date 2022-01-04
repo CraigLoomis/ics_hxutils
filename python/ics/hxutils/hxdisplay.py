@@ -324,7 +324,7 @@ def plotRefs(fname, reads=None, refRows=None, r0=0):
         #p2.plot(np.median(left, axis=0))
         #p2.plot(np.median(right, axis=0))
 
-def focusPlot(sweep, p=None, title=None):
+def focusPlot(sweep, p=None, title=None, sizeOnly=True):
     if p is None:
         f,p1 = plt.subplots(num='focusPlot', clear=True)
     else:
@@ -337,8 +337,9 @@ def focusPlot(sweep, p=None, title=None):
     sweep = sweep.sort_values(by=['focus'])
 
     minx, poly = nirander.getBestFocus(sweep)
-    p1.plot(sweep.focus, sweep.x2, '+-', alpha=0.3, label='x')
-    p1.plot(sweep.focus, sweep.y2, '+-', alpha=0.3, label='y')
+    if not sizeOnly:
+        p1.plot(sweep.focus, sweep.x2, '+-', alpha=0.3, label='x')
+        p1.plot(sweep.focus, sweep.y2, '+-', alpha=0.3, label='y')
     p1.plot(sweep.focus, sweep['size'], '+-', alpha=0.75, label='size')
     
     xx = np.linspace(sweep.focus.min(), sweep.focus.max()+1, 100)

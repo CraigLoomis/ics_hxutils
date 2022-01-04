@@ -522,7 +522,7 @@ def dispFocusPlots(df, title=None):
     for w_i, w in enumerate(sorted(df.wavelength.unique())[::-1]):
         for r_i, r in enumerate(sorted(df.row.unique())[::-1]):
             frows = df.loc[(df.wavelength == w) & (df.row == r)]
-            hxdisplay.focusPlot(frows, pl[r_i][w_i])
+            hxdisplay.focusPlot(frows, pl[r_i][w_i], sizeOnly=True)
 
     if title is None:
         title=f'dithers {df.visit.min()-4}..{df.visit.max()+4}'
