@@ -250,6 +250,7 @@ def measureDithers(butler, rows, thresh=50,
         if np.isnan(peaks.xpix.values[0]):
             logger.warning(f"peaks for {path} not measured")
         else:
+            peaks['size'] *= 5
             ee1 = centeredDither[ctrY, ctrX]
             if peaks['size'].values[0] < 8:
                 if ee1 < centeredDither[ctrY-1, ctrX] or ee1 < centeredDither[ctrY+1, ctrX] or ee1 < centeredDither[ctrY, ctrX-1] or ee1 < centeredDither[ctrY, ctrX+1]:
