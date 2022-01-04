@@ -417,8 +417,15 @@ def dispPlane(df, name, req=None, plotRange=None, pl=None,
     if plotRange[1] is None:
         plotRange[1] = req
 
+    if plotRange[0] > plotRange[1]:
+        plotRange[0], plotRange[1] = plotRange[1], plotRange[0]
+        cmap = plt.get_cmap(cmapName + '_r')
+        normVals = df[name]/req
+    else:
+        cmap = plt.get_cmap(cmapName)
+        normVals = req/df[name]
+
     norm = mpl.colors.TwoSlopeNorm(vcenter=req, vmin=plotRange[0], vmax=plotRange[1])
-    normVals = req/df[name]
     o = pl.scatter(df.wave, df.row, s=markersize*normVals, cmap=cmap, norm=norm,
                    c=df[name],
                    marker='o')
