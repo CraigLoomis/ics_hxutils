@@ -83,10 +83,10 @@ class ColdIlluminator(object):
 
         self.powerAll = gpiozero.OutputDevice(pin='GPIO2')
         self.ledSelect = GpioBinarySelect(pins=['GPIO26', 'GPIO20'], 
-                                          values={1:(False, True),
+                                          values={1:(True, False),
                                                   2:(False, False),
                                                   3:(True, True),
-                                                  4:(True, False)})
+                                                  4:(False, True)})
         self.ledPower = GpioLadder(['GPIO3', 'GPIO4',
                                     'GPIO14', 'GPIO15',
                                     'GPIO17', 'GPIO18',
