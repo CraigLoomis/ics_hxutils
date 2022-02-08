@@ -643,7 +643,30 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     return xreps, yreps
 
 def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
+    """Create a dithered spot from 9 individual raw spots.
 
+    Parameters
+    ----------
+    frames : `pd.DataFrame`
+        The raw measures (esp xstep, ystep)
+    hxCalib : `hxramp.HxCalib`
+        Holds the bad pixel mask
+    rad : int, optional
+        What to use for background, by default 15
+    doNorm : bool, optional
+        Normalize flux to the 1st spot, by default False
+    r1 : int, optional
+        The H4 read to use, by default -1
+
+    Returns
+    -------
+    dither : image
+        The composed dither image
+    inIms : list of images
+        The input image postage stamps
+    outIms : list of images
+        The dither component images.
+    """
     scale = 3
 
     frames = frames.sort_values('visit', ascending=True)
@@ -755,8 +778,9 @@ def writeDither(row, butler, dithIm):
         hdr.extend([dict(name='EE1', value=float(row.ee1), comment="EE of central pixel"),
                     dict(name='EE3', value=float(row.ee3), comment="EE of central 3 pixel box"),
                     dict(name='EE5', value=float(row.ee5), comment="EE of central 5 pixel box")])
-    except:
-        raise
+    except AttributeError:
+        pass
+
     path.parent.mkdir(parents=True, exist_ok=True)
     fitsio.write(path, dithIm, header=hdr, clobber=True)
     logger.info(f'wrote dither {path}')
