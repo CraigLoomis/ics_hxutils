@@ -569,6 +569,8 @@ lastFocus = None
 def moveFocus(cam, piston):
     """Move the FPA focus. Honors any defined tilts.
 
+    If we are not known to be moving positive, go 10um under the target and come back.
+
     Parameters
     ----------
     cam : `str`
@@ -883,8 +885,144 @@ def ditherAtPix(meade, pos, npos=3, nread=3, xsteps=5, ysteps=2):
 
     return ditherVisits
 
-def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
-            doDither=False, nread=3, doWindow=False, windowWidth=50):
+def _setRowWindow(meade, row, windowWidth):
+    """Configure H4 row skipping to straddle a row
+
+    Parameters
+    ----------
+    meade : `GimbalIlluminator`
+        Knows about the camera
+    row : `int`
+        The center row we want to read
+    windowWidth : `int`
+        The radius of the window to read
+    """
+    if row <= windowWidth-4 or row >= (4092-windowWidth):
+        raise ValueError(f'row window too close to edge: {row}')
+
+    skipToWindow = int(row) - windowWidth - 4
+    skipToTopRef = 4092 - (int(row) + windowWidth)
+    pfsutils.oneCmd(f'hx_{meade.cam}',
+                    f'setRowSkipping skipSequence=4,{skipToWindow},{2*windowWidth},'
+                    f'{skipToTopRef},{2*windowWidth + 8}')
+
+def _loopByWaves(meade, butler, waves, rows, focus,
+                 doDither=False, nread=3, doWindow=True, windowWidth=50):
+    spotList = []
+    for w_i, w in enumerate(waves):
+        meade.led(w)
+        _, dutyCycle, _ = meade.ledState()
+        for r_i, row in enumerate(rows):
+            pos = meade.getTargetPosition(w, row)
+            if doWindow:
+                _setRowWindow(meade, pos[1], windowWidth)
+            if not doDither:
+                meade.moveToPix(*pos, preload=True)
+            for f_i, f in enumerate(focus):
+                print(f"led {w} on row {int(row)} with focus {f}")
+                moveFocus(meade.cam, f)
+                try:
+                    if doDither:
+                        meas = ditherAtPix(meade, pos=pos, nread=nread)
+                    else:
+                        meas = takeBareSpot(meade, nread=nread,
+                                            comment=f'spotSet_{w}_{round(row)}_{round(f)}')
+                except Exception as e:
+                    raise
+
+                meas['row'] = int(row)
+                meas['focus'] = f
+                meas['wavelength'] = w
+                meas['dutyCycle'] = dutyCycle
+                spotList.append(meas)
+
+                rowFrame = pd.concat(spotList, ignore_index=True)
+                if butler is not None:
+                    outFileName = writeRawMeasures(butler, rowFrame)
+                    print(f"wrote {len(rowFrame)} lines to {outFileName} "
+                            f"at led {w} on row {row} with focus {f}")
+    return spotList
+
+def _loopByFocus(meade, butler, focus, rows, waves,
+                 doDither=False, nread=3, doWindow=True, windowWidth=50):
+    spotList = []
+    for f_i, f in enumerate(focus):
+        moveFocus(meade.cam, f)
+        for r_i, row in enumerate(rows):
+            # Any wavelength should do fine.
+            pos = meade.getTargetPosition(waves[0], row)
+            if doWindow:
+                _setRowWindow(meade, pos[1], windowWidth)
+            for w_i, w in enumerate(waves):
+                pos = meade.getTargetPosition(w, row)
+                meade.led(w)
+                _, dutyCycle, _ = meade.ledState()
+                print(f"led {w} on row {int(row)} with focus {f}")
+                try:
+                    if doDither:
+                        meas = ditherAtPix(meade, pos=pos, nread=nread)
+                    else:
+                        meade.moveToPix(*pos, preload=True, onlyIfNecessary=True)
+                        meas = takeBareSpot(meade, nread=nread,
+                                            comment=f'spotSet_{w}_{round(row)}_{round(f)}')
+                except Exception as e:
+                    raise
+
+                meas['row'] = int(row)
+                meas['focus'] = f
+                meas['wavelength'] = w
+                meas['dutyCycle'] = dutyCycle
+                spotList.append(meas)
+
+                rowFrame = pd.concat(spotList, ignore_index=True)
+                if butler is not None:
+                    outFileName = writeRawMeasures(butler, rowFrame)
+                    print(f"wrote {len(rowFrame)} lines to {outFileName} "
+                            f"at led {w} on row {row} with focus {f}")
+
+    return spotList
+
+def _loopOverPos(meade, butler, focus, posList,
+                 doDither=False, nread=3, doWindow=True, windowWidth=50):
+    spotList = []
+
+    for f_i, f in enumerate(focus):
+        moveFocus(meade.cam, f)
+
+        for w, row in posList:
+            pos = meade.getTargetPosition(w, row)
+            if doWindow:
+                _setRowWindow(meade, pos[1], windowWidth)
+            meade.led(w)
+            _, dutyCycle, _ = meade.ledState()
+            print(f"led {w} on row {int(row)} with focus {f}")
+            try:
+                if doDither:
+                    meas = ditherAtPix(meade, pos=pos, nread=nread)
+                else:
+                    meade.moveToPix(*pos, preload=True, onlyIfNecessary=True)
+                    meas = takeBareSpot(meade, nread=nread,
+                                        comment=f'spotSet_{w}_{round(row)}_{round(f)}')
+            except Exception as e:
+                raise
+
+            meas['row'] = int(row)
+            meas['focus'] = f
+            meas['wavelength'] = w
+            meas['dutyCycle'] = dutyCycle
+            spotList.append(meas)
+
+            rowFrame = pd.concat(spotList, ignore_index=True)
+            if butler is not None:
+                outFileName = writeRawMeasures(butler, rowFrame)
+                print(f"wrote {len(rowFrame)} lines to {outFileName} "
+                        f"at led {w} on row {row} with focus {f}")
+
+    return spotList
+
+def spotSet(meade, butler=None, waves=None, rows=None, posList=None, focus=None,
+            doDither=False, nread=3, doWindow=True, windowWidth=50,
+            byFocus=True):
     """Primary acquisition routine: takes a (wave, row, focus) grid of spots or dithers
 
     Parameters
@@ -897,6 +1035,8 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
         wavelength to take spots at. By default uses all the defined lamps.
     rows : float or list of floats
         rows to take stops at. Not really optional.
+    posList : list of (wave, row) pairs
+        In PLACE of waves and rows.
     focus : float or list of floats
         FPA focus position to take spots at. Not really optional
     doDither : bool, optional
@@ -907,6 +1047,8 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
         Whether to window using the H4 row skipping option, by default False
     windowWidth : int, optional
         If doWindow=True, the "radius" of the window, by default 50.
+    byFocus : bool, optional
+        If True, loop first by focus positions, to minimize FPA motor moves
 
     Returns
     -------
@@ -917,16 +1059,20 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
 
     """
 
-    if waves is None:
-        waves = meade.lamps.wave
-    if np.isscalar(waves):
-        waves = [waves]
+    if posList is not None:
+        if (waves is not None or rows is not None):
+            raise RuntimeError("if posList specified, waves and/or rows cannot be.")
+    else:
+        if waves is None:
+            waves = meade.lamps.wave
+        if np.isscalar(waves):
+            waves = [waves]
 
-    if rows is None:
-        raise ValueError("rows must be specified, either a scalar or a list of positions.")
-    if np.isscalar(rows):
-        rows = [rows]
-    rows = np.array(rows, dtype='f4')
+        if rows is None:
+            raise ValueError("rows must be specified, either a scalar or a list of positions.")
+        if np.isscalar(rows):
+            rows = [rows]
+        rows = np.array(rows, dtype='f4')
 
     if focus is None:
         raise ValueError("focus must be specified, either a scalar or a list of values.")
@@ -934,47 +1080,22 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
         focus = [focus]
     focus = np.array(focus, dtype='f4')
 
-    spotList = []
+    if len(focus) == 1:
+        moveFocus(meade.cam, focus[0])
+
     try:
-        for w_i, w in enumerate(waves):
-            meade.led(w)
-            _, dutyCycle, _ = meade.ledState()
-            for r_i, row in enumerate(rows):
-                pos = meade.getTargetPosition(w, row)
-                if doWindow:
-                    if pos[1] <= windowWidth-4 or pos[1] >= (4092-windowWidth):
-                        raise ValueError(f'row window too close to edge: {pos}')
-
-                    skipToWindow = int(pos[1]) - windowWidth - 4
-                    skipToTopRef = 4092 - (int(pos[1]) + windowWidth)
-                    pfsutils.oneCmd('hx_n1',
-                                    f'setRowSkipping skipSequence=4,{skipToWindow},{2*windowWidth},'
-                                    f'{skipToTopRef},{2*windowWidth + 8}')
-                if not doDither:
-                    meade.moveToPix(*pos, preload=True)
-                for f_i, f in enumerate(focus):
-                    print(f"led {w} on row {row} with focus {f}")
-                    moveFocus(meade.cam, f)
-                    try:
-                        if doDither:
-                            meas = ditherAtPix(meade, pos=pos, nread=nread)
-                        else:
-                            meas = takeBareSpot(meade, nread=nread,
-                                                comment=f'spotSet_{w}_{round(row)}_{round(f)}')
-                    except Exception as e:
-                        raise
-
-                    meas['row'] = int(row)
-                    meas['focus'] = f
-                    meas['wavelength'] = w
-                    meas['dutyCycle'] = dutyCycle
-                    spotList.append(meas)
-
-                    rowFrame = pd.concat(spotList, ignore_index=True)
-                    if butler is not None:
-                        outFileName = writeRawMeasures(butler, rowFrame)
-                        print(f"wrote {len(rowFrame)} lines to {outFileName} "
-                              f"at led {w} on row {row} with focus {f}")
+        if posList is not None:
+            spotList = _loopOverPos(meade, butler, focus, posList,
+                                    doDither=doDither, nread=nread,
+                                    doWindow=doWindow, windowWidth=windowWidth)
+        elif byFocus:
+            spotList = _loopByFocus(meade, butler, focus, rows, waves,
+                                    doDither=doDither, nread=nread,
+                                    doWindow=doWindow, windowWidth=windowWidth)
+        else:
+            spotList = _loopByWaves(meade, butler, waves, rows, focus,
+                                    doDither=doDither, nread=nread,
+                                    doWindow=doWindow, windowWidth=windowWidth)
     except Exception as e:
         print(f'oops: {e}')
         # breakpoint()
@@ -988,7 +1109,7 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
 
 def _writeMeasures(butler, df, measureType):
     outFileName = butler.getPath(measureType,
-                                 idDict=dict(visit=df.visit.min()))
+                                 idDict=dict(visit=int(df.visit.min())))
     outFileName.parent.mkdir(mode=0o2775, parents=True, exist_ok=True)
     with open(outFileName, mode='w') as outf:
         outf.write(df.to_string())
@@ -1202,11 +1323,13 @@ def basicDataFrame(meade, visits, focus=None):
 
     wavelength, dutyCycle, _ = meade.ledState()
     xstep, ystep = meade.getSteps()
-
+    xpix0, ypix0 = meade.stepsToPix((xstep, ystep))
     scanFrame['wavelength'] = wavelength
     scanFrame['xstep'] = xstep
     scanFrame['ystep'] = ystep
     scanFrame['dutyCycle'] = dutyCycle
+    scanFrame['xpix0'] = xpix0
+    scanFrame['ypix0'] = ypix0
 
     return scanFrame
 
