@@ -302,7 +302,7 @@ def getConfig(name, subdirectory=''):
 class GimbalIlluminator(Illuminator):
     knownLampTypes = {'led', 'mono'}
 
-    def __init__(self, cam='n1', forceLedOff=True, logLevel=logging.INFO, ip=None,
+    def __init__(self, cam, forceLedOff=True, logLevel=logging.INFO, ip=None,
                  lampType='led'):
 
         self.cam = cam
@@ -532,7 +532,7 @@ class GimbalIlluminator(Illuminator):
         return pos
 
     def home(self, doX=True, doY=True):
-        """Home one or more axes. Both by default. The controller leaves it """
+        """Home one or more axes. Both by default. The controller leaves it at "middle" of range. """
 
         if doX:
             self.dev.cmd("home x", maxTime=100)
@@ -540,9 +540,10 @@ class GimbalIlluminator(Illuminator):
             self.dev.cmd("home y", maxTime=100)
         return self.getSteps()
 
-def takeSuperDark(meade, nexp=3, nread=3, force=False, cam='n1'):
+def takeSuperDark(meade, nexp=3, nread=3, force=False):
     offtimeRequired = 3600
     offTime = meade.ledOffTime()
+    cam = meade.cam
     if offTime < offtimeRequired:
         if not force:
             raise RuntimeError(f"need lamps to be off for {offtimeRequired}, not {offTime} seconds")
@@ -981,7 +982,7 @@ def spotSet(meade, butler=None, waves=None, rows=None, focus=None,
     finally:
         meade.lampsOff()
         if doWindow:
-            pfsutils.oneCmd('hx_n1', 'clearRowSkipping')
+            pfsutils.oneCmd(f'hx_{meade.cam}', 'clearRowSkipping')
 
     return pd.concat(spotList, ignore_index=True)
 
