@@ -524,11 +524,9 @@ class GimbalIlluminator(Illuminator):
         pos = (col, row)
         try:
             nudge = self.nudges[nudgeKey]
-            pos2 = (pos[0] + nudge[0], pos[1] + nudge[1])
-            self.logger.info(f'nudge for {nudgeKey}: {pos} to {pos2}')
-            pos = pos2
+            self.logger.info(f'nudge for {nudgeKey}: {pos} to {nudge}')
+            pos = nudge
         except KeyError:
-            self.logger.debug(f'no nudge for {nudgeKey}, going to {pos}')
             pass
 
         return pos
