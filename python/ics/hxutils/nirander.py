@@ -22,6 +22,8 @@ from pfs.utils import spectroIds as pfsSpectroIds
 from . import butlerMaps
 from . import darkCube
 from . import hxramp
+from . import hxcalib
+from . import pathUtils
 from . import pfsutils
 
 reload(pfsButler)
@@ -538,7 +540,7 @@ def takeRamp(cam, nread, nreset=1, exptype="test", comment="no_comment", quiet=T
         comment = comment.replace(' ', '_')
     pfsutils.oneCmd(f'hx_{cam}', f'ramp nread={nread} exptype={exptype} objname=\"{comment}\"',
                     quiet=quiet)
-    visit = hxramp.pathToVisit(hxramp.lastRamp(cam=cam))
+    visit = pathUtils.pathToVisit(pathUtils.lastRamp(cam=cam))
 
     return visit
 
