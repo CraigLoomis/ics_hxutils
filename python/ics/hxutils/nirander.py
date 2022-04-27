@@ -544,6 +544,7 @@ def takeRamp(cam, nread, nreset=1, exptype="test", comment="no_comment", quiet=T
 
     return visit
 
+lastFocus = None
 def moveFocus(cam, piston):
     """Move the FPA focus. Honors any defined tilts.
 
@@ -555,7 +556,13 @@ def moveFocus(cam, piston):
         Absolute focus position, in microns.
     """
 
-    pfsutils.oneCmd(f'xcu_{cam}', f'motors moveFocus microns={piston}')
+    global lastFocus
+
+    if lastFocus is None or piston < lastFocus:
+        pfsutils.oneCmd(f'xcu_{cam}', f'motors moveFocus microns={piston-10} abs')
+
+    pfsutils.oneCmd(f'xcu_{cam}', f'motors moveFocus microns={piston} abs')
+    lastFocus = piston
 
 def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True):
     """Move to the given positions and acquire spots.
