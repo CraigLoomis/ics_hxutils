@@ -528,9 +528,46 @@ def dispFocusPlots(df, title=None):
     for w_i, w in enumerate(sorted(df.wavelength.unique())[::-1]):
         for r_i, r in enumerate(sorted(df.row.unique())[::-1]):
             frows = df.loc[(df.wavelength == w) & (df.row == r)]
-            hxdisplay.focusPlot(frows, pl[r_i][w_i], sizeOnly=True)
+def dispOffsets(df, title=None, yrange=None, focus=None, perSpot=True):
+    nrows = len(df.row.unique())
+    ncols = len(df.wavelength.unique())
 
-    if title is None:
-        title=f'dithers {df.visit.min()-4}..{df.visit.max()+4}'
-    f.suptitle(title)
+    f, pl = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, sharey=True,
+                         figsize=(10,10), squeeze=False)
+
+    for r_i in range(nrows):
+        pl[r_i,0].set_ylabel('dither offset (15um pix)')
+    for c_i in range(ncols):
+        pl[-1,c_i].set_xlabel('dither offset (15um pix)')
+
+
+    for w_i, w in enumerate(sorted(df.wavelength.unique())[::-1]):
+        for r_i, r in enumerate(sorted(df.row.unique())[::-1]):
+            p = pl[r_i][w_i]
+            frows = df.loc[(df.wavelength == w) & (df.row == r) & (df.focus == focus)]
+            if len(frows) == 0:
+                continue
+            if not perSpot:
+                minx = frows.xpix.values[0]
+                miny = frows.ypix.values[0]
+
+            for vis in groupAllDithers(frows).visit:
+                oneDither = ditherFromVisit(frows, vis)
+                if perSpot:
+                    minx = oneDither.xpix.values[0]
+                    miny = oneDither.ypix.values[0]
+                print(f'{w} {r} {vis}: {len(oneDither)} ({minx},{miny})')
+                p.plot(oneDither.xpix - minx, oneDither.ypix - miny, 'x', alpha=0.5)
+            p.hlines([0.0, 0.33, 0.66], -0.1, 1.2, alpha=0.3, color='k')
+            p.vlines([0.0, 0.33, 0.66], -0.1, 1.2, alpha=0.3, color='k')
+            if perSpot:
+                p.set_ylim(-0.1, 1.1)
+                p.set_xlim(-0.1, 1.1)
+
+    finalTitle=f'dithers {df.visit.min()}..{df.visit.max()}'
+    if title is not None:
+        finalTitle = f'{finalTitle} {title}'
+    f.suptitle(finalTitle)
+    f.tight_layout()
+
     return f
