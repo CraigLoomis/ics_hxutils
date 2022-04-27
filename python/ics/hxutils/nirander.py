@@ -393,6 +393,20 @@ class GimbalIlluminator(Illuminator):
 
         return t, tinv
 
+    def updateTargets(self, df):
+        """Utility hack to retransform pix0 = transform(step), assuming trnsform has changed. """
+        xtargets = []
+        ytargets = []
+        for i in range(len(df)):
+            row = df.iloc[i]
+            xstep, ystep = row[['xstep', 'ystep']]
+            target = self.stepsToPix((xstep, ystep))
+            xtargets.append(target[0])
+            ytargets.append(target[1])
+
+        df['xpix0'] = xtargets
+        df['ypix0'] = ytargets
+
     def setTransform(self, transforms):
         try:
             t, tinv = transforms
