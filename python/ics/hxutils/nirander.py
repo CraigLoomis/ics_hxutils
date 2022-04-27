@@ -688,7 +688,7 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
 
     return xreps, yreps
 
-def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
+def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, r1=-1):
     """Create a dithered spot from 9 individual raw spots.
 
     Parameters
@@ -701,6 +701,8 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
         What to use for background, by default 15
     doNorm : bool, optional
         Normalize flux to the 1st spot, by default False
+    meade : `GimbalIlluminator`
+        If the spot center is not known, what to ask for a good guess.
     r1 : int, optional
         The H4 read to use, by default -1
 
@@ -726,7 +728,14 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
     if len(frames) != scale*scale or len(xsteps) != scale or len(ysteps) != scale:
         raise ValueError("only want to deal with 3x3 dithers")
 
-    ctr = np.round(frames[['xpix','ypix']].values[ctrIdx]).astype('i4')
+    if 'xpix' not in frames or np.isnan(frames.xpix.values[ctrIdx]):
+        pixFromStep = True
+        ctrPix = meade.stepsToPix((frames[['xstep','ystep']].values[ctrIdx]))
+        ctr = np.round(ctrPix).astype('i4')
+    else:
+        pixFromStep = False
+        ctr = np.round(frames[['xpix','ypix']].values[ctrIdx]).astype('i4')
+    print(f'ctr={ctr}')
     xslice = slice(ctr[0]-rad, ctr[0]+rad)
     yslice = slice(ctr[1]-rad, ctr[1]+rad)
 
@@ -754,9 +763,10 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, r1=-1):
             im *= (normSum/imSum).astype('f4')
         xoff = xoffsets[f1.xstep]
         yoff = yoffsets[f1.ystep]
-        print(f'{f1.visit:0.0f}: wave: {f1.wavelength} focus: {f1.focus} '
-              f'pix: {xoff} {yoff} step: {f1.xstep:0.0f},{f1.ystep:0.0f} '
-              f'ctr: {f1.xpix:0.2f},{f1.ypix:0.2f} bkgnd: {bkgnd:0.3f} '
+        print(f'{f1.visit:0.0f}: wave: {f1.wavelength} row: {f1.row} focus: {f1.focus} '
+              f'pix: {xoff} {yoff} {pixFromStep} step: {f1.xstep:0.0f},{f1.ystep:0.0f} '
+              f'bkgnd: {bkgnd:0.3f} '
+              #f'ctr: {f1.xpix:0.2f},{f1.ypix:0.2f} bkgnd: {bkgnd:0.3f} '
               f'scale: {normSum:0.1f}/{imSum:0.1f}={normSum/imSum:0.3f}')
         outIm[yoff::scale, xoff::scale] = im
         inIms.append(im)
@@ -812,14 +822,25 @@ def writeDither(row, butler, dithIm):
     hdr = [dict(name='VISIT', value=int(row.visit), comment="visit of 0,0 image"),
             dict(name='WAVE', value=float(row.wavelength)),
             dict(name='FOCUS', value=float(row.focus)),
-            dict(name='ROW', value=int(row.row), comment="rounded row number, for easy grouping"),
-            dict(name='XPIX', value=float(row.xpix), comment="measured xc of 0,0 image"),
-            dict(name='YPIX', value=float(row.ypix), comment="measured yc of 0,0 image"),
-            dict(name='SIZE', value=float(row.size), comment="measured RMS of 0,0 image"),
-            dict(name='X2', value=float(row.x2), comment="measured 2nd moment"),
-            dict(name='Y2', value=float(row.y2), comment="measured 2nd moment"),
-            dict(name='FLUX', value=float(row.flux), comment="measured total flux of 0,0 image"),
-            dict(name='PEAK', value=float(row.peak), comment="measured peak of 0,0 image")]
+            dict(name='ROW', value=int(row.row), comment="rounded row number, for easy grouping")]
+    try:
+        hdr.extend([dict(name='XPIX0', value=float(row.xpix0), comment="calculated xc of 0,0 image"),
+                    dict(name='YPIX0', value=float(row.ypix0), comment="calculated yc of 0,0 image")])
+    except AttributeError:
+        pass
+    try:
+        hdr.extend([dict(name='XPIX', value=float(row.xpix), comment="measured xc of 0,0 image"),
+                    dict(name='YPIX', value=float(row.ypix), comment="measured yc of 0,0 image")])
+    except AttributeError:
+        pass
+    try:
+        hdr.extend([dict(name='SIZE', value=float(row.size), comment="measured RMS of 0,0 image"),
+                    dict(name='X2', value=float(row.x2), comment="measured 2nd moment"),
+                    dict(name='Y2', value=float(row.y2), comment="measured 2nd moment"),
+                    dict(name='FLUX', value=float(row.flux), comment="measured total flux of 0,0 image"),
+                    dict(name='PEAK', value=float(row.peak), comment="measured peak of 0,0 image")])
+    except AttributeError:
+        pass
     try:
         hdr.extend([dict(name='EE1', value=float(row.ee1), comment="EE of central pixel"),
                     dict(name='EE3', value=float(row.ee3), comment="EE of central 3 pixel box"),
@@ -827,19 +848,32 @@ def writeDither(row, butler, dithIm):
     except AttributeError:
         pass
 
+    # Damnit: FITS header cards do not support NaNs. Hack here.
+    hdr0 = hdr
+    hdr = []
+    for h in hdr0:
+        if not np.isnan(h['value']):
+            hdr.append(h)
+
     path.parent.mkdir(parents=True, exist_ok=True)
     fitsio.write(path, dithIm, header=hdr, clobber=True)
     logger.info(f'wrote dither {path}')
 
     return idDict
 
-def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False, r1=-1):
+def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False, meade=None, r1=-1):
     dithers = []
     ids = []
     for i in range(len(frames)//9):
         dithFrames = frames.iloc[i*9:(i+1)*9]
         print(len(dithFrames))
-        dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm, r1=r1)
+        try:
+            dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm, meade=meade,
+                                       r1=r1)
+        except Exception as e:
+            print(f'failed to create dither from {dithFrames.visit.values[0]}: {e}')
+            continue
+
         dithers.append(dith1)
 
         if butler is not None:
