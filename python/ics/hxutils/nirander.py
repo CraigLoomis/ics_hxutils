@@ -1305,23 +1305,20 @@ def getFocusGrid(center, spacing=2, r=5):
     focusReq = center + (np.arange(2*r-1) - (r-1))*spacing
     return focusReq
 
-def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
+def focusSweep(meade, butler, wave, row,
+               center, spacing, r,
+               nread=3, measureCall=None, doWindow=True):
     focusReq = getFocusGrid(center, spacing=spacing, r=r)
     print(focusReq)
 
     if focusReq[0] < 15:
         raise RuntimeError(f"focusReq[0] too low, not starting below: focusReq")
 
-    moveFocus(cam, focusReq[0]-10)
+    moveFocus(meade.cam, focusReq[0]-10)
 
-    visits = []
-    for f in focusReq:
-        moveFocus(cam, f)
-        visit = takeRamp(cam=cam, nread=nread, comment=f'focus_sweep:{f}')
-        visits.append(visit)
-
-    scanFrame = pd.DataFrame(dict(visit=visits, focus=focusReq))
-
+    scanFrame = spotSet(meade, butler, waves=[wave], rows=[row],
+                        focus=focusReq, doWindow=doWindow,
+                        nread=nread)
     if measureCall is not None:
         try:
             focusSet = measureCall(scanFrame)
@@ -1331,12 +1328,9 @@ def _scanForFocus(center, spacing, r, nread=3, cam='n1', measureCall=None):
                 bestFocus >= focusReq[0] and
                 bestFocus <= focusReq[-1]):
 
-                moveFocus(cam, bestFocus)
-                visit = takeRamp(cam=cam, nread=nread, comment=f'at_best_focus:{bestFocus}')
-                visits.append(visit)
-
+                bestFrame = spotSet(meade, butler, waves=[wave], rows=[row],
+                                    focus=bestFocus, doWindow=doWindow)
                 bestSize = focusPoly(bestFocus)
-                bestFrame = pd.DataFrame(dict(visit=[visit], focus=[bestFocus]))
                 measureCall(bestFrame)
                 print(f"expected {bestSize:0.2f}, got {bestFrame['size'].values[0]:0.2f} ")
 
@@ -1367,39 +1361,7 @@ def basicDataFrame(meade, visits, focus=None):
 
     return scanFrame
 
-def focusSweep(meade, led=None, pix=None, centerFocus=None, spacing=10, r=5, measureCall=None):
-    """Setup the gimbal to the given pixel and led, and make a focus sweep """
-
-    doLedOff = led is not None
-
-    if led is not None:
-        meade.led(led)
-    wavelength, dutyCycle, _ = meade.ledState()
-
-    if pix is not None:
-        meade.moveToPix(*pix)
-    xpix, ypix = meade.getPix()
-    xstep, ystep = meade.getSteps()
-
-    focusScan = scanForFocus(centerFocus, spacing=spacing, r=r,
-                             measureCall=measureCall)
-
-    if doLedOff:
-        meade.lampsOff()
-
-    focusScan['wavelength'] = wavelength
-    focusScan['xstep'] = xstep
-    focusScan['ystep'] = ystep
-    focusScan['dutyCycle'] = dutyCycle
-
-    return focusScan
-
-def scanForFocus(center, spacing=5, r=4, measureCall=None):
-    return _scanForFocus(center, spacing=spacing, r=r, measureCall=measureCall)
-def scanForCrudeFocus(center, spacing=25, r=3, measureCall=None):
-    return _scanForFocus(center, spacing=spacing, r=r, measureCall=measureCall)
-
-def measureSet(scans, meade=None, hxCalib=None, thresh=150, center=None,
+def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
                radius=10, searchRadius=5, skipDone=True, ims=None, trimBad=True, doClear=False,
                convolveSigma=None, kernel=True, remask=False,
                rawSpots=False, r0=0, r1=-1):
