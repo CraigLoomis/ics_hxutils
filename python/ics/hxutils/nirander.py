@@ -468,11 +468,33 @@ class GimbalIlluminator(Illuminator):
         xPos, yPos = self.getSteps()
         self.moveToSteps(xPos+dx, yPos+dy)
 
-    def moveToSteps(self, x, y, preload=True):
+    def moveToSteps(self, x, y, preload=True, onlyIfNecessary=True):
+        """Move the gimbelator to the given (x,y) steps. Apply preload and shortcircuit by default.
+
+        Parameters
+        ----------
+        x : `int`
+            Steps for the X stage
+        y : `int`
+            Steps for the Y stage
+        preload : bool, optional
+            Whether to always come from the negative side, by default True
+        onlyIfNecessary : bool, optional
+            Whether to skip commands if we are already there, by default True
+
+        Returns
+        -------
+        xpos, ypos : `tuple`
+            The final position.
+        """
         x = int(x)
         y = int(y)
         xPos, yPos = self.getSteps()
-        if preload:
+        if onlyIfNecessary and xPos == x and yPos == y:
+            return xPos, yPos
+
+        # For the preload, if *either* motor is > requested pos, move both below target.
+        if preload and (x < xPos or y < yPos):
             cmdStr = f"move {x-self.preloadDistance} {y-self.preloadDistance}"
             self.dev.cmd(cmdStr, debug=True, maxTime=45)
 
@@ -487,10 +509,10 @@ class GimbalIlluminator(Illuminator):
 
         return xNew, yNew
 
-    def moveToPix(self, xpix, ypix, preload=True):
+    def moveToPix(self, xpix, ypix, preload=True, onlyIfNecessary=True):
         xstep, ystep = self.pixToSteps([xpix, ypix])
 
-        xNew, yNew = self.moveToSteps(xstep, ystep, preload=preload)
+        xNew, yNew = self.moveToSteps(xstep, ystep, preload=preload, onlyIfNecessary=onlyIfNecessary)
         return self.stepsToPix([xNew, yNew])
 
     def getTargetPosition(self, wave, row):
