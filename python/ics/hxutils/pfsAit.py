@@ -518,16 +518,33 @@ def dispEEPlane(df, name, focusCenter=None):
 
     return f
 
-def dispFocusPlots(df, title=None):
+def dispFocusPlots(df, title=None, yrange=None):
     nrows = len(df.row.unique())
     ncols = len(df.wavelength.unique())
 
     f, pl = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, sharey=True,
                          figsize=(10,10), squeeze=False)
 
+    for r_i in range(nrows):
+        pl[r_i,0].set_ylabel('spot size (um)')
+    for c_i in range(ncols):
+        pl[-1,c_i].set_xlabel('focus pos (um)')
+
+
     for w_i, w in enumerate(sorted(df.wavelength.unique())[::-1]):
         for r_i, r in enumerate(sorted(df.row.unique())[::-1]):
             frows = df.loc[(df.wavelength == w) & (df.row == r)]
+            hxdisplay.focusPlot(frows, pl[r_i][w_i], sizeOnly=True,
+                                dithers=True, yrange=yrange)
+
+    finalTitle=f'dithers {df.visit.min()}..{df.visit.max()}'
+    if title is not None:
+        finalTitle = f'{finalTitle} {title}'
+    f.suptitle(finalTitle)
+    f.tight_layout()
+
+    return f
+
 def dispOffsets(df, title=None, yrange=None, focus=None, perSpot=True):
     nrows = len(df.row.unique())
     ncols = len(df.wavelength.unique())
