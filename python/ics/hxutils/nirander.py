@@ -1389,7 +1389,7 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
     """
 
     if hxCalib is None:
-        hxCalib = hxramp.HxCalib()
+        hxCalib = hxcalib.HxCalib()
 
     for f in 'x2', 'y2', 'xpix', 'ypix', 'flux', 'peak', 'size':
         if f not in scans or doClear:
@@ -1499,3 +1499,10 @@ def takeSpot(meade, pos=None, focus=None, light=None, nread=3, comment="no_comme
     if light is not None:
         meade.lampsOff()
     return df
+
+def oneSpotFromDither(df):
+    """Return a single spot (the LL one) from each dither in a frame"""
+    rows = []
+    for gname, grp in df.groupby(['focus', 'row', 'wavelength']):
+        rows.append(grp[(grp.xstep == grp.xstep.min()) & (grp.ystep == grp.ystep.min())])
+    return pd.concat(rows)
