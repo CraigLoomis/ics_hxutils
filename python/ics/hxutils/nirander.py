@@ -1463,12 +1463,17 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
             scans.loc[scan_i, 'ypix'] = bestSpot.y
             scans.loc[scan_i, 'x2'] = bestSpot.x2
             scans.loc[scan_i, 'y2'] = bestSpot.y2
+            scans.loc[scan_i, 'xy'] = bestSpot.xy
             scans.loc[scan_i, 'size'] = 2*np.sqrt(bestSpot.x2 + bestSpot.y2)
             scans.loc[scan_i, 'a'] = bestSpot.a
             scans.loc[scan_i, 'b'] = bestSpot.b
-            scans.loc[scan_i, 'size_ab'] =  2*np.sqrt(bestSpot.a + bestSpot.b)
+            scans.loc[scan_i, 'size_ab'] = 2*np.sqrt(bestSpot.a + bestSpot.b)
             scans.loc[scan_i, 'flux'] = bestSpot.flux
             scans.loc[scan_i, 'peak'] = bestSpot.peak
+            scans.loc[scan_i, 'xmin'] = bestSpot.xmin
+            scans.loc[scan_i, 'xmax'] = bestSpot.xmax
+            scans.loc[scan_i, 'ymin'] = bestSpot.ymin
+            scans.loc[scan_i, 'ymax'] = bestSpot.ymax
 
     return scans
 
