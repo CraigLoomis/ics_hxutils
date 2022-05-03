@@ -84,6 +84,14 @@ def genLagrangeCoeffs(xshift, order=4):
 
     return outSlice, xSlices, coeffs
 
+def _clipOnes(d, precision):
+    if d == 1.0:
+        return d - 1/precision
+    elif d == -1.0:
+        return d + 1/precision
+    else:
+        return d
+
 def shiftSpotLagrange(img, dx, dy, order=4, kargs=None, precision=100):
     """ Shift a spot using order=4 Lagrange interpolation.
 
@@ -122,6 +130,8 @@ def shiftSpotLagrange(img, dx, dy, order=4, kargs=None, precision=100):
 
     dx = int(dx*precision + 0.5)/precision
     dy = int(dy*precision + 0.5)/precision
+    dx = _clipOnes(dx, precision)
+    dy = _clipOnes(dy, precision)
 
     if abs(dx) < 1e-6:
         outImg1 = img

@@ -9,11 +9,12 @@ import matplotlib.pyplot as plt
 
 import sep
 
+from . import pathUtils
 from . import nirander
-from . import hxstack as hx
+from . import hxcalib
 from . import hxramp
 
-reload(hx)
+reload(hxcalib)
 reload(hxramp)
 reload(nirander)
 
@@ -24,77 +25,76 @@ def camFromPath(fname):
     p = pathlib.Path(fname)
     return 'n' + p.stem[-2]
 
-def regStats(fpath, slices=None, r0=0, r1=-1, fitr0=1, fitr1=-1, doDiffs=False, 
+def regStats(fpath, slices=None, r0=0, r1=-1, fitr0=1, fitr1=-1, doDiffs=False,
              residMax=-1, order=1, preampGain=None):
-    
-    ff = hx.ramp(fpath)
-    nreads = hx.rampNreads(ff)
-    height, width = ff[1].read().shape
-    
-    readTime = (width / 4096) * hx.singleReadTime
+
+    ramp = hxramp.HxRamp(fpath)
+    nreads = ramp.nreads
+    width = ramp.width
+
+    readTime = (width / 4096) * hxcalib.singleReadTime
     if preampGain is not None:
-        adcGain = hx.calcGain(preampGain, camFromPath(fpath))
+        adcGain = hxcalib.calcGain(preampGain, camFromPath(fpath))
     else:
         preampGain = 1.0
         adcGain = 1.0
-    
+
     print(f"hreads={nreads} readTime={readTime} adcGain={adcGain}")
     fig, plots = plt.subplots(nrows=2, figsize=(10,6), sharex=True)
     p1, p2  = plots
-    
+
     if r0 > fitr0:
         fitr0 = r0
     else:
         fitr0 -= r0
-    
+
     if slices is None:
         slices = slice(4,4093), slice(4,4093)
     meds = []
     dmeds = []
     ddevs = []
     if r1 == -1 or r1 is None:
-        plotReads = np.arange(r0, nreads)
+        plotReads = np.arange(r0+1, nreads)
     else:
-        plotReads = np.arange(r0, r1+1)
+        plotReads = np.arange(r0+1, r1+1)
     print(plotReads)
+    read0 = ramp.readN(r0)[slices]
+    meds.append(np.median(read0))
     for r_i in plotReads:
-        im = hx.rampRead(ff, r_i) * adcGain
-        reg = im[slices]
-        meds.append(np.median(reg))
-        if r_i > r0:
-            lastReg = hx.rampRead(ff, r_i - 1)[slices] * adcGain
-            dim = reg - lastReg
-            dmeds.append(np.median(dim))
-            ddevs.append(np.std(dim))
+        read1 = ramp.readN(r_i)[slices]
+        meds.append(np.median(read1))
+        dim = read1 - read0
+        dmeds.append(np.median(dim))
+        ddevs.append(np.std(dim))
     dmeds = np.array(dmeds)
     ddevs = np.array(ddevs)
     yoffset = meds[fitr0]
-    
+
     plotX = plotReads * readTime
-    fitY = np.array(meds[fitr0:fitr1])
+    fitY = np.array(dmeds[fitr0:fitr1])
     fitX = plotX[fitr0:fitr1]
     coeffs = np.polyfit(fitX, fitY, order)
     print(f'x: {fitX}')
     print(f'y: {fitY}')
-    
+
     label = "%0.3ft + %0.2f" % (coeffs[0], coeffs[1])
     line = np.poly1d(coeffs)
     # print(len(meds), len(fitX), len(fitY))
-    
-    p1.plot(plotX, meds - coeffs[-1], '+-')
+
+    p1.plot(plotX, dmeds - coeffs[-1], '+-')
     p1.plot(plotX, line(plotX) - coeffs[-1], ':', color='red', label=label)
     p1.plot(fitX, line(fitX) - coeffs[-1], color='red')
 
     residX = plotX
-    residY = meds
+    residY = dmeds
     if residMax is not None:
         residX = plotX[:residMax]
-        residY = meds[:residMax]
+        residY = dmeds[:residMax]
     p2.plot(residX, residY - line(residX), label='residuals')
     p2.hlines(0,fitX[0],fitX[-1],colors='r',alpha=0.5)
-    title = "%s\nx=[%d,%d] y=[%d,%d]  nreads=%d %0.2f $e^-/ADU$ preampGain=%0.2f readTime=%0.2f" % (os.path.basename(fpath), 
+    title = "%s\nx=[%d,%d] y=[%d,%d]  nreads=%d %0.2f $e^-/ADU$ preampGain=%0.2f readTime=%0.2f" % (os.path.basename(fpath),
                                                                                                     slices[1].start,
-                                                                                                    slices[1].stop-1, 
+                                                                                                    slices[1].stop-1,
                                                                                                     slices[0].start,
                                                                                                     slices[0].stop-1,
                                                                                                     nreads, adcGain,
@@ -106,7 +106,7 @@ def regStats(fpath, slices=None, r0=0, r1=-1, fitr0=1, fitr1=-1, doDiffs=False,
     p2.grid(which='minor', axis='y', alpha=0.25)
     p1.legend(loc='lower right', fontsize='small')
     p2.legend(loc='lower right', fontsize='small')
-    
+
     p1.set_ylabel(f'$e^- increment$')
     #p3.set_ylabel('$e^-/s$')
     p2.set_xlabel('seconds')
@@ -119,7 +119,7 @@ def regStats(fpath, slices=None, r0=0, r1=-1, fitr0=1, fitr1=-1, doDiffs=False,
     #p3.hlines(0,0,plotX[-1],colors='r',alpha=0.3)
 
     fig.tight_layout()
-    
+
     return fig, fitX, fitY, coeffs
 
 def regShow(stack, slices, display, r0=0, diffs='last', matchScales=True):
