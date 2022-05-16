@@ -1,3 +1,4 @@
 setupRequired(ics_utils)
 setupRequired(pfs_utils)
 pathPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
+pathPrepend(PATH, ${PRODUCT_DIR}/bin)
