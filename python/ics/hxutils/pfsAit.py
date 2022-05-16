@@ -289,7 +289,7 @@ def measureDithers(butler, rows, thresh=50,
         else:
             peaks['size'] *= 5
             ee1 = centeredDither[ctrY, ctrX]
-            if peaks['size'].values[0] < 8:
+            if peaks['size'].values[0] < 8: # Avoid checking donuts.
                 if ee1 < centeredDither[ctrY-1, ctrX] or ee1 < centeredDither[ctrY+1, ctrX] or ee1 < centeredDither[ctrY, ctrX-1] or ee1 < centeredDither[ctrY, ctrX+1]:
                     logger.debug(f"ee1 pixel is less than some neighbor: {meas.wavelength.values[0]} @ {meas.row.values[0]}\n"
                                    f"{peaks}\n"
@@ -465,8 +465,6 @@ def dispPlane(df, name, req=None, plotRange=None, pl=None,
     o = pl.scatter(df.wave, df.row, s=markersize*normVals, cmap=cmap, norm=norm,
                    c=df[name],
                    marker='o')
-
-    pl.invert_xaxis()
     xticks = mpl.ticker.FixedLocator(df.wave.unique())
     yticks = mpl.ticker.FixedLocator(df.row.unique())
     pl.xaxis.set_major_locator(xticks)
@@ -488,9 +486,12 @@ def dispPlane(df, name, req=None, plotRange=None, pl=None,
 
 def dispSizes(df, atFocus=None, focusRange=None, title=None):
     f, pl = plt.subplots(nrows=2, ncols=2, num='sizes',
-                         clear=True, figsize=(6,6),
-                         sharex=True, sharey=False, squeeze=False)
+                         clear=True, figsize=(10,10),
+                         sharex=True, sharey=True, squeeze=False)
     pl = pl.flatten()
+
+    # Note: due to sharex=True, do this here once. It will apply to all plots.
+    pl[0].invert_xaxis()
 
     if atFocus is None:
         spotFrame = df
@@ -513,8 +514,14 @@ def dispSizes(df, atFocus=None, focusRange=None, title=None):
              _makePlotRange('ee3', 0.544),
              _makePlotRange('ee5', 0.907),
              _makePlotRange('size', 18.9, under=1.5, over=0.9))
+    if atFocus is None:
+        label = "mean of BEST"
+    else:
+        label = "mean"
+
     for p_i, (name, requirement, plotRange) in enumerate(plots):
-        dispPlane(spotees, name, req=requirement, plotRange=plotRange, pl=pl[p_i], label='mean of BEST')
+        dispPlane(spotees, name, req=requirement, plotRange=plotRange,
+                  pl=pl[p_i], label=label)
     # dispFocusPlane(df, focusCenter=atFocus, focusRange=focusRange, pl=pl[-1])
 
     # Hack-y cleanup
@@ -529,7 +536,7 @@ def dispSizes(df, atFocus=None, focusRange=None, title=None):
             atFocus = "BEST FOR EACH"
         title = f'dithers from visit={df.visit.min()} at focus={atFocus}'
     f.suptitle(title, size='x-large')
-    f.tight_layout()
+    # f.tight_layout()
 
     return f
 
