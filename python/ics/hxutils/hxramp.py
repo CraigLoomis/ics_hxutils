@@ -1,4 +1,5 @@
 import logging
+import pathlib
 
 import fitsio
 import numpy as np
@@ -22,6 +23,8 @@ class HxRamp(object):
         self.logger = logging.getLogger('hxramp')
 
         if not isinstance(fitsOrPath, fitsio.FITS):
+            p = pathlib.Path(fitsOrPath)
+            self.cam = 'n' + p.stem[-2]
             fitsOrPath = fitsio.FITS(fitsOrPath)
         self.fits = fitsOrPath
         self.phdu = self.header()
@@ -49,7 +52,28 @@ class HxRamp(object):
         return True
 
     def calcBasics(self):
-        """Figure out some basic properties of the ramp, using the first read or header."""
+        """Figure out some basic properties of the ramp, using the first read or header.
+
+        Specifically, get:
+        - nreads
+        - hchan
+        - interleave{Ratio, Offset}
+        - frameTime, rampTime
+        """
+
+        # Disgusting: figure out how many reads we have by looking at last HDU's EXTNAME.
+        #
+        lastHdr = self.fits[-1].read_header()
+        lastName = lastHdr['extname']
+        _, num = lastName.split('_')
+        num = int(num)
+        self.nreads = num
+        self.preampGain = self.phdu['W_H4GAIN']
+
+        read0 = self.dataN(0)
+        self.width = read0.shape[1]
+        self.frameTime = self.phdu['W_H4FRMT']
+        self.rampTime = self.phdu['EXPTIME']
 
         try:
             self.interleaveRatio = self.phdu['W_H4IRPN']
@@ -57,7 +81,6 @@ class HxRamp(object):
         except KeyError:
             self.logger.warn('header does not have interleave keys, using data and guessing offset.')
 
-            read0 = self.dataN(0)
             irp0 = self.irpN(0)
 
             if irp0 == 0:
@@ -72,19 +95,6 @@ class HxRamp(object):
             self.logger.warn('header does not have nchannels key, using 32.')
             self.nchan = 32
 
-    @property
-    def nreads(self):
-        """Number of reads in ramp.
-
-        This is WRONG: we are about to start reading and saving the reset frame.
-        Also, does not handle "raw" frames, with the reference pixels leftt interleaved.
-
-        """
-
-        if self.interleaveRatio > 0:
-            return (len(self.fits)-1)//2
-        else:
-            return (len(self.fits)-1)
 
     def _readIdxToAbsoluteIdx(self, n):
         """Convert possibly negative 0-indexed ramp read index into positive 0-indexed read"""
