@@ -13,7 +13,7 @@ configMap['detector'] = dict(template="{nirLabConfigRoot}/{cam}/detector.yaml",
                              loader=yaml.load)
 
 dataMap['spsFile'] = dict(template="pfsx/{pfsDay}/sps/PF{site}A{visit:06d}{spectrograph}{armNum}.fits")
-dataMap['rampFile'] = dict(template="pfsx/{pfsDay}/sps/PF{site}B{visit:06d}{spectrograph}{armNum}.fits")
+dataMap['rampFile'] = dict(template="ramps/{pfsDay}/PF{site}B{visit:06d}{spectrograph}{armNum}.fits")
 
 dataMap['reduxDir'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}")
 
@@ -41,3 +41,5 @@ dataMap['measures'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimen
                            "measures-{visit:06d}-{cam}.txt")
 dataMap['ditherMeasures'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
                                "ditherMeasures-{visit:06d}-{cam}.txt")
+dataMap['thermalData'] = dict(template="{nirLabReduxRoot}/{cam}/{experimentName}/"
+                               "thermalData-{visit:06d}-{cam}.txt")
