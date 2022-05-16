@@ -233,6 +233,8 @@ def measureDithers(butler, rows, thresh=50,
         dither, hdr = fitsio.read(path, header=True)
         rawDithers.append(dither)
 
+        # Hmm. Assumes that the dither is basically centered already. But
+        # if we cannot depend on the gimbelator, that may not be right.
         ditherCtr = (np.array(dither.shape)[::-1] + 1) // 2
         ctrX = ditherCtr[1]
         ctrY = ditherCtr[0]
@@ -243,8 +245,9 @@ def measureDithers(butler, rows, thresh=50,
         if len(meas) != 1:
             raise RuntimeError(f"{len(meas)} peaks for {path}: {meas}")
         if np.isnan(meas.xpix.values[0]):
-            logger.warning(f"peaks for {path} not measured")
-            centeredDithers.append(None)
+            logger.warning(f"peak for {path} not measured")
+            centeredDithers.append(dither)
+            centeredPeaks.append(meas)
             continue
 
         measX = meas.xpix.values[0]
@@ -256,17 +259,21 @@ def measureDithers(butler, rows, thresh=50,
             pixDist = int(abs(dx))
             if dx < 0:
                 dither[:, :-pixDist] = dither[:, pixDist:]
+                dither[:, -pixDist:] = np.median(dither[:, -pixDist:])
                 dx += pixDist
             else:
                 dither[:, pixDist:] = dither[:, :-pixDist]
+                dither[:, :pixDist] = np.median(dither[:, :pixDist])
                 dx -= pixDist
         if abs(dy) >= 1:
             pixDist = int(abs(dy))
             if dy < 0:
                 dither[:-pixDist, :] = dither[pixDist:, :]
+                dither[-pixDist:, :] = np.median(dither[-pixDist:, :])
                 dy += pixDist
             else:
                 dither[pixDist:, :] = dither[:-pixDist, :]
+                dither[:pixDist, :] = np.median(dither[:pixDist, :])
                 dy -= pixDist
 
         centeredDither = shiftSpot(dither, dx, dy)[0]
