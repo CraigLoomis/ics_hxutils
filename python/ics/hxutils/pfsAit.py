@@ -155,12 +155,32 @@ def shiftSpotLagrange(img, dx, dy, order=4, kargs=None, precision=100):
 
 shiftSpot = shiftSpotLagrange
 
-def groupDithers(ditherSet):
-    ditherGroups = ditherSet.groupby(['wavelength', 'row', 'focus'])
+def groupDithers(ditherSet, groupby=None):
+    if groupby is None:
+        groupby = ['wavelength', 'row', 'focus']
+    ditherGroups = ditherSet.groupby(groupby)
     dig = ditherGroups['visit'].aggregate(np.min).reset_index()
     ret = ditherSet[ditherSet.visit.isin(dig.visit)]
 
     return ret
+
+def groupAllDithers(ditherSet, groupby=None):
+    res = []
+
+    if groupby is None:
+        groupby = ['wavelength', 'row', 'focus']
+    ditherGroups = ditherSet.groupby(groupby)
+    for dname, grp in ditherGroups:
+        minx = grp.xstep.min()
+        miny = grp.ystep.min()
+        llStep = ditherSet.loc[(ditherSet.xstep == minx) & (ditherSet.ystep == miny)]
+        res.append(llStep)
+    return pd.concat(res, ignore_index=True)
+
+def ditherFromVisit(ditherSet, visit):
+    ditherSet = ditherSet.sort_values('visit', ignore_index=True)
+    dith = ditherSet.loc[(ditherSet.visit >= visit) & (ditherSet.visit <= visit+9)]
+    return dith
 
 def selectDithers(rows, *, wavelength=None, row=None, focus=None):
     dithers = groupDithers(rows)
