@@ -23,6 +23,7 @@ def medianCubes(paths, r0=0, r1=-1):
     nvisits = len(paths)
     read0 = ramp0.readN(r0)
 
+    print(f'dark cube: {nvisits} visits, {nreads} reads from {r0} to {r1}')
     # The stack of the frames fomr all the visits for a _single_ given read.
     tempStack = np.empty(shape=(nvisits, *(read0.shape)),
                          dtype=read0.dtype)
@@ -105,6 +106,22 @@ def badMask_noflux(ramp):
     fluxMask = (flux <= 0).astype('i1')
 
     return fluxMask
+
+def badMask_sigma(ramp, sigma=2):
+    cds = ramp.cds()
+    mask = np.zeros(shape=cds.shape, dtype='i1')
+
+    patchSize = 128
+
+    for y in range(0, 4096, patchSize):
+        for x in range(0, 4096, patchSize):
+            p1 = cds[y:y+patchSize, x:x+patchSize]
+            pmed = np.median(p1)
+            pdev = np.std(p1)
+
+            mask[y:y+patchSize, x:x+patchSize] = np.abs(p1 - pmed) >= pdev*sigma
+
+    return mask
 
 def badMask(ramp, r0thresh=5000):
     """Build up a mask from a set of tests, with each represented by a bitplane.
