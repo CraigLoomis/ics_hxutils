@@ -112,6 +112,9 @@ class HxRamp(object):
             idx = self._readIdxToFITSIdx(readNum)
             return self.fits[f'IMAGE_{idx}'].read_header()
 
+    def hduByName(self, hduName):
+        return self.fits[hduName].read()
+
     def dataN(self, n):
         """Return the data plane for the n-th read.
 
@@ -220,9 +223,7 @@ class HxRamp(object):
         """
         return self.readN(r1) - self.readN(r0)
 
-    def cds(self):
-        """Return all the flux in the ramp."""
-        return self.cdsN(r0=0, r1=-1)
+    cds = cdsN
 
     def dataStack(self, r0=0, r1=-1, dtype='u2'):
         """Return all the data frames, in a single 3d stack.
@@ -355,6 +356,28 @@ class HxRamp(object):
             stack[r_i-1,:,:] = read - read0
 
         return stack
+
+def rebin(arr, factors):
+    """Bin 2d-array by the given factors
+
+    Parameters
+    ----------
+    arr : `np.ndarray`
+        2d array
+    factors : pair-like
+        factor by which to bin the `arr` dimensions.
+
+    Returns
+    -------
+    `np.ndarray`
+        smaller array
+    """
+    factors =  np.array(factors)
+    new_shape = np.array(arr.shape) // factors
+
+    shape = (new_shape[0], factors[0],
+             new_shape[1], factors[1])
+    return arr.reshape(shape).mean([-1, 1])
 
 def interpolateChannelIrp(rawChan, refRatio, refOffset, doFlip=True):
     """Given a single channel's IRP image and the IRP geometry, return a full-size reference image for the channel.
