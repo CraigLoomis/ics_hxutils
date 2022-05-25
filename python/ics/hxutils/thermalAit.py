@@ -55,26 +55,6 @@ def getTimestamp(hdr):
     dt = np.datetime64(f'{hdr["DATE-OBS"]}T{hdr["UT-STR"]}')
     return dt
 
-def plotSingleTest(plot, data, prop, testName=None,
-                   label=None, color=None, useTime=False):
-    testData = data if testName is None else data.loc[data.testName == testName]
-    if label is None:
-        label = testName
-
-    if useTime:
-        x = testData.ut
-    else:
-        x = testData.index
-    label = f'{label} : {testData[prop].mean():0.4f}'
-    ax, = plot.plot(x, testData[prop], '+-', color=color,
-                    label=label)
-    plot.grid(axis='both', which='both', alpha=0.5)
-    plot.tick_params(axis='both', labelsize=7)
-
-    # plot.legend(bbox_to_anchor=(1.01,1.02), loc="upper left")
-
-    return ax, label
-
 def loadDataForVisit0(visit0, cam, ignoreDuds=True):
     dataPath = butler.getPath('thermalData', visit=visit0, cam=cam)
 
@@ -225,6 +205,34 @@ plotGroups = dict(shieldTemps=['shield1Temp', 'shield2Temp'],
                              'bodyTemp1', 'bodyTemp2', 'bodyTemp3', 'bodyTemp4'],
                   roomTemps=['roomTemp1', 'roomTemp2'])
 
+def plotSingleTest(plot, data, prop, testName=None,
+                   label=None, color=None, useTime=False):
+
+    if testName is None:
+        testData = data
+    else:
+        testData = data.loc[(data.testName == testName) & (data.useForTest)]
+    if len(testData) == 0:
+        return None, None
+
+    if label is None:
+        label = testName
+
+
+    if useTime:
+        x = testData.ut
+    else:
+        x = testData.index
+    label = f'{label} : {testData[prop].mean():0.4f}'
+    ax = plot.plot(x, testData[prop], '+', color=color,
+                   label=label)[0]
+    plot.grid(axis='both', which='both', alpha=0.5)
+    plot.tick_params(axis='both', labelsize=7)
+
+    # plot.legend(bbox_to_anchor=(1.01,1.02), loc="upper left")
+
+    return ax, label
+
 def plotTestData(butler, meta, useTime=False, tests=None, plots=None,
                  groupSensors=True, fluxRange=[0.01, 0.15]):
     try:
@@ -369,6 +377,7 @@ def plotMain(args=None):
 
     configureMatplotlib()
 
+    # The two-piece date+time is a pain. So read_csv ourselves
     dfPath = butler.getPath('thermalData', visit=opts.visit0, cam=opts.cam)
     df = pd.read_csv(dfPath, parse_dates=['ut'])
 
