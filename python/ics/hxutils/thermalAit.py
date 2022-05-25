@@ -1,3 +1,5 @@
+from importlib import reload
+
 import argparse
 import logging
 import pathlib
@@ -14,6 +16,9 @@ from pfs.utils import spectroIds
 from . import hxramp
 from . import pathUtils
 from . import butlerMaps
+
+from . import thermalFilters
+reload(thermalFilters)
 
 logger = logging.getLogger('thermalAit')
 logger.setLevel(logging.INFO)
@@ -332,6 +337,8 @@ def plotMain(args=None):
                         help='filename to write to'),
     parser.add_argument('--noSave', action='store_true',
                         help='Do not save output file')
+    parser.add_argument('--rawSamples', action='store_true',
+                        help='Skip name/value cleanups')
 
     opts = parser.parse_args(args)
     butler = getButler(experimentName=opts.name, cam=opts.cam)
@@ -340,6 +347,9 @@ def plotMain(args=None):
 
     dfPath = butler.getPath('thermalData', visit=opts.visit0, cam=opts.cam)
     df = pd.read_csv(dfPath, parse_dates=['ut'])
+
+    if not opts.rawSamples:
+        df = thermalFilters.filterSamples(df, visit0=opts.visit0)
 
     f, pl, df2 = plotTestData(butler, df, plots=opts.plots,
                               useTime=opts.plotTime)
