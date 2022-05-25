@@ -34,7 +34,7 @@ while getopts ":c:n:r:s:" opt; do
             ;;
         n)
             NRAMPS=${OPTARG}
-            (( NRAMPS > 0 && NRAMPS < 15 )) || usage "silly/invalid number of ramps requested: $NRAMPS"
+            (( NRAMPS > 0 && NRAMPS < 100 )) || usage "silly/invalid number of ramps requested: $NRAMPS"
             ;;
         r)
             NREADS=${OPTARG}
@@ -42,7 +42,7 @@ while getopts ":c:n:r:s:" opt; do
             ;;
         s)
             SLEEP=${OPTARG}
-            (( SLEEP >= 0 && SLEEP < 900 )) || usage "silly/invalid sleep time: $SLEEP"
+            (( SLEEP >= 0 && SLEEP < 1200 )) || usage "silly/invalid sleep time: $SLEEP"
             ;;
         *)
             usage
@@ -60,7 +60,7 @@ echo "cam=$CAM testName=$testName nramps=$NRAMPS nreads=$NREADS sleep=$SLEEP"
 
 nameFile=/tmp/takeThermal.txt
 fnames=""
-for i in `jot $NRAMPS`; do
+for i in `seq $NRAMPS`; do
     oneCmd.py hx_$CAM ramp nread=$NREADS exptype=dark objname=$testName | tee $nameFile
     fname=$(grep filename= $nameFile | sed 's/^[^"]*"//; s/".*//')
     echo "ramp $i fname=$fname"
