@@ -263,12 +263,12 @@ def plotTestData(butler, meta, useTime=False, tests=None, plots=None,
 
     nplots = len(plots)
     plotsDict = dict(zip(plots, range(nplots)))
-    pageHeight = 2 + nplots*2
+    pageHeight = 2 + nplots*2.25
     f, plist = plt.subplots(nrows=nplots, num='plate', clear=True, sharex=True,
-                            figsize=(8,pageHeight), constrained_layout=False)
+                            figsize=(7.5,pageHeight), constrained_layout=False)
     if nplots == 1:
         plist = [plist]
-    logger.warning(f'pd: {plotsDict}')
+    logger.debug(f'pd: {plotsDict}')
     if useTime:
         allX = atall.ut
     else:
@@ -308,21 +308,26 @@ def plotTestData(butler, meta, useTime=False, tests=None, plots=None,
         p.set_ylabel(ylabels[pname])
 
     # Give *one* x label and legend.
-    xlabel = 'UT' if useTime else 'visit'
+    if useTime:
+        xlabel = 'UT'
+        f.autofmt_xdate(rotation=45)
+    else:
+        xlabel='visit index'
     plist[-1].set_xlabel(xlabel)
 
+    f.subplots_adjust(top=0.95, right=0.75, left=0.1)
     axbox = plist[0].get_position()
-    print(labels.values())
-    f.legend(axes.values(), labels.values(),
+    logger.debug(f'naxes={len(axes)} nlabels={len(labels)} labels={labels.values()}')
+    f.legend(handles=axes.values(),
+             labels=labels.values(),
              loc="upper left",
              borderaxespad=0.0,    # Small spacing around legend box
              bbox_transform=f.transFigure,
-             bbox_to_anchor=[axbox.x0+axbox.width*1.1, axbox.y0+axbox.height])
-    # plt.subplots_adjust(right=0.85)
-
+             bbox_to_anchor=[axbox.x0+axbox.width*1.02, axbox.y0+axbox.height])
+    # plt.subplots_adjust(right=0.80)
     r0 = hxramp.HxRamp(pathUtils.rampPath(visit=meta.visit.min()))
-    f.suptitle(f'visits {meta.visit.min()} .. {meta.visit.max()}; gain={r0.e_per_ADU} e-/ADU')
-    f.tight_layout()
+    f.suptitle(f'{len(meta)} visits {meta.visit.min()} .. {meta.visit.max()}; gain={r0.e_per_ADU} e-/ADU')
+    # f.tight_layout()
 
     return f, plotsDict, meta
 
