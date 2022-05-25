@@ -207,19 +207,26 @@ ylabels = dict(medianFlux='ramp flux, e-/s',
                frontRingTemp='front ring temp, K',
                detTemp='H4 temp, K',
                asicTemp='ASIC temp, K',
+               shieldTemps='shield temps, K',
                shield2Temp='shield 2 temp, K',
                shield1Temp='shield 1 temp, K',
                manginTemp='Mangin temp, K',
+               bodyTemps='body temps, K',
                bodyTemp1='body temp 1, K',
                bodyTemp2='body temp 2, K',
                bodyTemp3='body temp 3, K',
                bodyTemp4='body temp 4, K',
+               roomTemps='room temps, K',
                roomTemp1='room temp 1, K',
                roomTemp2='room temp 2, K')
 
+plotGroups = dict(shieldTemps=['shield1Temp', 'shield2Temp'],
+                  bodyTemps=['frontRingTemp',
+                             'bodyTemp1', 'bodyTemp2', 'bodyTemp3', 'bodyTemp4'],
+                  roomTemps=['roomTemp1', 'roomTemp2'])
+
 def plotTestData(butler, meta, useTime=False, tests=None, plots=None,
-                 fluxRange=[0.01, 0.15]):
-    print('0: plotTest: %s' % (plotSingleTest))
+                 groupSensors=True, fluxRange=[0.01, 0.15]):
     try:
         plt.close('plate')
     except:
@@ -230,10 +237,16 @@ def plotTestData(butler, meta, useTime=False, tests=None, plots=None,
     atall = meta
 
     if plots is None:
-        plots = ['medianFlux', 'detTemp', 'plateTemp',
-                 'frontRingTemp', 'bodyTemp4',
-                 'shield1Temp', 'shield2Temp',
-                 'roomTemp1']
+        if groupSensors:
+            plots = ['medianFlux', 'detTemp', 'plateTemp',
+                     'bodyTemps',
+                     'shieldTemps',
+                     'roomTemps']
+        else:
+            plots = ['medianFlux', 'detTemp', 'plateTemp',
+                     'frontRingTemp', 'bodyTemp4',
+                     'shield1Temp', 'shield2Temp',
+                     'roomTemp1']
     else:
         plots = ['medianFlux'] + list(plots)
 
@@ -258,16 +271,27 @@ def plotTestData(butler, meta, useTime=False, tests=None, plots=None,
     for p_i, pname in enumerate(plotsDict.keys()):
         p = plist[plotsDict[pname]]
 
-        # Always give context by plotting the whole sequence in the background.
-        ax, = p.plot(allX, atall[pname], '+-', color='k', alpha=0.2)
+        try:
+            pl = plotGroups[pname]
+        except KeyError:
+            pl = [pname]
 
-        # Then highlight all the selected values for the active tests.
-        axes = dict()
-        for t in tests:
-            ax, label = plotSingleTest(p, meta, pname, t, useTime=useTime)
-            if p_i == 0:
-                axes[t] = ax
-                labels[t] = label
+        for pl_i, plname in enumerate(pl):
+            # Always give context by plotting the whole sequence in the background.
+            p.set_prop_cycle(None)
+            ax = p.plot(allX, atall[plname], '+-', color='k', alpha=0.2)[0]
+
+            # Then highlight all the selected values for the active tests.
+            for t_i, t in enumerate(tests):
+                ax, label = plotSingleTest(p, meta, plname, t, useTime=useTime)
+                if ax is None:
+                    if t_i == 0:
+                        logger.warning(f'skipped plot for {t}')
+                    continue
+                if p_i == 0 and pl_i == 0:
+                    logger.debug(f'{t} label {label} for {ax}')
+                    axes[t] = ax
+                    labels[t] = label
 
         # Special case the range for the main plot
         if p_i == 0:
