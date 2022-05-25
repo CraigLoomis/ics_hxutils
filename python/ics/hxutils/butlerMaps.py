@@ -1,9 +1,15 @@
+import pandas as pd
 import ruamel_yaml
 
 yaml = ruamel_yaml.YAML(typ='safe')
 
 configMap = dict()
 dataMap = dict()
+
+def loadPandasCsv(file):
+    return pd.read_csv(file)
+def loadPandasText(file):
+    return pd.read_csv(file, sep='\s+')
 
 # "root"s, but still relative to dataRoot, etc.
 configKeys = dict(nirLabReduxRoot="redux",
@@ -13,7 +19,8 @@ configMap['detector'] = dict(template="{nirLabConfigRoot}/{cam}/detector.yaml",
                              loader=yaml.load)
 
 dataMap['spsFile'] = dict(template="pfsx/{pfsDay}/sps/PF{site}A{visit:06d}{spectrograph}{armNum}.fits")
-dataMap['rampFile'] = dict(template="ramps/{pfsDay}/PF{site}B{visit:06d}{spectrograph}{armNum}.fits")
+dataMap['rampFile'] = dict(template="ramps/{pfsDay}/PF{site}B{visit:06d}{spectrograph}{armNum}.fits",
+                           loaderModule='ics.hxutils.hxramp')
 
 dataMap['reduxDir'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}")
 
@@ -40,6 +47,8 @@ dataMap['rawMeasures'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experi
 dataMap['measures'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
                            "measures-{visit:06d}-{cam}.txt")
 dataMap['ditherMeasures'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
-                               "ditherMeasures-{visit:06d}-{cam}.txt")
+                               "ditherMeasures-{visit:06d}-{cam}.txt",
+                               loader=loadPandasText)
 dataMap['thermalData'] = dict(template="{nirLabReduxRoot}/{cam}/{experimentName}/"
-                               "thermalData-{visit:06d}-{cam}.txt")
+                               "thermalData-{visit:06d}-{cam}.txt",
+                               loader=loadPandasCsv)
