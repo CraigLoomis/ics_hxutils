@@ -136,6 +136,7 @@ def ingestTestData(butler, visit0, visitN=None, overwrite=False, cam='n3'):
             tasic = hdr['W_XTMP10']
             tshield2 = hdr['W_XTMP9']
             tshield1 = hdr['W_XTMP8']
+            tspreader = hdr['W_XTMP6']
             tmangin = hdr['W_XTMP2']
 
             tbody1 = hdr['W_TPTMP1']
@@ -148,7 +149,7 @@ def ingestTestData(butler, visit0, visitN=None, overwrite=False, cam='n3'):
             newData.append([v, ts, testName,
                             exptime, np.round(med,4), np.round(clippedMean, 4), np.round(s, 4),
                             ttp, tfr, tdet, tasic,
-                            tshield2, tshield1, tmangin,
+                            tshield2, tshield1, tspreader, tmangin,
                             tbody1, tbody2, tbody3, tbody4,
                             troom1, troom2, True, False])
             print(f'{p}: {v} {med:0.3f} {clippedMean:0.3f} {s:0.3f} {ttp} {tfr} {ts}')
@@ -162,7 +163,7 @@ def ingestTestData(butler, visit0, visitN=None, overwrite=False, cam='n3'):
                                     'medianFlux', 'meanFlux', '_',
                                     'plateTemp', 'frontRingTemp',
                                     'detTemp', 'asicTemp',
-                                    'shield2Temp', 'shield1Temp', 'manginTemp',
+                                    'shield2Temp', 'shield1Temp', 'spreaderTemp', 'manginTemp',
                                     'bodyTemp1', 'bodyTemp2', 'bodyTemp3', 'bodyTemp4',
                                     'roomTemp1', 'roomTemp2', 'useForTest', 'ignore'),
                            )
@@ -188,6 +189,7 @@ ylabels = dict(medianFlux='ramp flux, e-/s',
                detTemp='H4 temp, K',
                asicTemp='ASIC temp, K',
                shieldTemps='shield temps, K',
+               spreaderTemp='spreader temp, K',
                shield2Temp='shield 2 temp, K',
                shield1Temp='shield 1 temp, K',
                manginTemp='Mangin temp, K',
@@ -197,8 +199,8 @@ ylabels = dict(medianFlux='ramp flux, e-/s',
                bodyTemp3='body temp 3, K',
                bodyTemp4='body temp 4, K',
                roomTemps='room temps, K',
-               roomTemp1='room temp 1, K',
-               roomTemp2='room temp 2, K')
+               roomTemp1='room temp in, K',
+               roomTemp2='room temp out, K')
 
 plotGroups = dict(shieldTemps=['shield1Temp', 'shield2Temp'],
                   bodyTemps=['frontRingTemp',
@@ -249,7 +251,7 @@ def plotTestData(butler, meta, useTime=False, tests=None, plots=None,
             plots = ['medianFlux', 'detTemp', 'plateTemp',
                      'bodyTemps',
                      'shieldTemps',
-                     'roomTemps']
+                     'roomTemp1']
         else:
             plots = ['medianFlux', 'detTemp', 'plateTemp',
                      'frontRingTemp', 'bodyTemp4',

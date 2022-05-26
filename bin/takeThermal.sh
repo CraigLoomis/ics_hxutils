@@ -61,9 +61,9 @@ echo "cam=$CAM testName=$testName nramps=$NRAMPS nreads=$NREADS sleep=$SLEEP"
 nameFile=/tmp/takeThermal.txt
 fnames=""
 for i in `seq $NRAMPS`; do
-    oneCmd.py hx_$CAM ramp nread=$NREADS exptype=dark objname=$testName | tee $nameFile
+    oneCmd.py hx_$CAM ramp nread=$NREADS exptype=dark objname="$testName" | tee $nameFile
     fname=$(grep filename= $nameFile | sed 's/^[^"]*"//; s/".*//')
-    echo "ramp $i fname=$fname"
+    echo "ramp $i of $NRAMPS : fname=$fname"
     fnames="$fnames $fname"
     sleep $SLEEP
 done
