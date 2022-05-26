@@ -1,9 +1,13 @@
 import numpy as np
 import pandas as pd
 
-def filter_61722(df):
-    dfOut = df.copy()
-    dfOut.loc[df.medianFlux > 0.3, 'medianFlux'] = np.nan
+def filter_61722(df, startVisit=0):
+    dfOut = df[df.visit >= startVisit].copy()
+    dfOut = dfOut[dfOut.testName != "TEST"]
+    dfOut = dfOut[dfOut.testName != "cplTest"]
+    dfOut = dfOut.copy().reindex()
+
+    dfOut.loc[df.medianFlux > 0.1, 'medianFlux'] = np.nan
 
     # Earliest idg.temps channels not periodically sampled.
     dfOut.loc[df.visit <= 67135,

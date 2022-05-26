@@ -362,6 +362,10 @@ def plotMain(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--visit0', type=int, required=True,
                         help='first visit in set; used to find measurements.')
+    parser.add_argument('--start', type=int, default=0,
+                        help='first visit to plot.')
+    parser.add_argument('--fluxMax', type=float, default=0.15,
+                        help='top of the flux range for plotting.')
     parser.add_argument('--name', type=str, default='thermal',
                         help='butler experiment name, default="thermal"')
     parser.add_argument('--cam', type=str, default='n3',
@@ -387,10 +391,10 @@ def plotMain(args=None):
     df = pd.read_csv(dfPath, parse_dates=['ut'])
 
     if not opts.rawSamples:
-        df = thermalFilters.filterSamples(df, visit0=opts.visit0)
+        df = thermalFilters.filterSamples(df, visit0=opts.visit0, startVisit=opts.start)
 
     f, pl, df2 = plotTestData(butler, df, plots=opts.plots,
-                              useTime=opts.plotTime)
+                              useTime=opts.plotTime, fluxRange=[0.01, opts.fluxMax])
     if not opts.noSave:
         outfile = opts.output
         if outfile is None:
