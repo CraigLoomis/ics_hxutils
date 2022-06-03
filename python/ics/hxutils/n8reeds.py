@@ -20,7 +20,7 @@ class N8Reeds:
          - 8-11  per-led grounds
          - 12-15 per-led power outputs
 
-        To best turn things off: close all grounds, open all outputs
+        To best turn things off: open all outputs, close all grounds
         
         """
         self.verbose = verbose
@@ -28,6 +28,9 @@ class N8Reeds:
         self.connect()
 
         self.switch0 = 8
+        self.ground0 = 8
+        self.output0 = 12
+        
         self.makeLive = 0
 
     def __str__(self):
@@ -84,16 +87,29 @@ class N8Reeds:
         self.master.execute(1, cst.WRITE_MULTIPLE_COILS, 
                             switch0, 
                             output_value=switchStates)
-        ret = self._getSwitches()
-        return ret
 
+    def _setGrounds(self, states):
+        """Set the four ground switches."""
+        if len(states) != 4:
+            raise ValueError('need exactly four values')
+
+        self._setSwitches(states, switch0=self.ground0)
+        
+    def _setOutputs(self, states):
+        """Set the four output switches."""
+        if len(states) != 4:
+            raise ValueError('need exactly four values')
+
+        self._setSwitches(states, switch0=self.output0)
+        
     def ledsOff(self):
         """Turn all LEDs off as best we can.
 
         Close all ground switches, open all output switches.
         """
 
-        self._setSwitches([1,1,1,1, 0,0,0,0])
+        self._setOutputs([0,0,0,0])
+        self._setGrounds([1,1,1,1])
         return self.getState()
     
     def ledOn(self, led):
@@ -107,16 +123,16 @@ class N8Reeds:
 
         if led > 4 or led < 0:
             raise ValueError(f'led must be 0 or 1..4 ({led}')
+        if led == 0:
+            return self.ledsOff()
         
         grounds = [1]*4
         outputs = [0]*4
 
-        if led > 0:
-            idx = led-1
-            grounds[idx] = 0
-            outputs[idx] = 1
+        grounds[led - 1] = 0
+        outputs[led - 1] = 1
 
-        switches = grounds + outputs
-        self._setSwitches(switches)
+        self._setGrounds(grounds)
+        self._setOutputs(outputs)
         
         return self.getState()        
