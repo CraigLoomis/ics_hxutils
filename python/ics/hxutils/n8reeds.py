@@ -59,6 +59,16 @@ class N8Reeds:
         states = [grounds[i] | (outputs[i] << 1) for i in range(4)]
         return states
 
+    def status(self):
+        rawState = self.getState()
+        led = 0
+        for i in range(4):
+            s = rawState[i]
+            if s == 2:
+                led = i+1
+                break
+        return led
+    
     def _setSwitch(self, switchId, state):
         self.master.execute(1, cst.WRITE_SINGLE_COIL, switchId, 
                             output_value=int(bool(state)))
