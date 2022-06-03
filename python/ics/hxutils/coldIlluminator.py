@@ -5,6 +5,8 @@ import logging
 import gpiozero
 import trio
 
+import n8reeds
+
 logging.basicConfig(format='%(asctime)s %(name)s  %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO)
 
@@ -82,11 +84,7 @@ class ColdIlluminator(object):
         self.logger.setLevel(level=logLevel)
 
         self.powerAll = gpiozero.OutputDevice(pin='GPIO2')
-        self.ledSelect = GpioBinarySelect(pins=['GPIO26', 'GPIO20'], 
-                                          values={1:(True, False),
-                                                  2:(False, False),
-                                                  3:(True, True),
-                                                  4:(False, True)})
+        self.ledSelect = n8reeds.N8Reeds()
         self.ledPower = GpioLadder(['GPIO3', 'GPIO4',
                                     'GPIO14', 'GPIO15',
                                     'GPIO17', 'GPIO18',
@@ -111,10 +109,10 @@ class ColdIlluminator(object):
     def setLED(self, ledNum, level):
         if ledNum == 0 or level == 0:
             self.powerAll.off()
-            self.ledSelect.setLed(2)
+            self.ledSelect.ledsOff()
             self.ledPower.setLevel(0)
         elif ledNum >= 1 and ledNum <= 4:
-            self.ledSelect.setLed(ledNum)
+            self.ledSelect.ledOn(ledNum)
             self.ledPower.setLevel(level)
             self.powerAll.on()
         else:
