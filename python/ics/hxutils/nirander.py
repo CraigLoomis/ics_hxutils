@@ -58,9 +58,9 @@ def newButler(experimentName='unnamed', cam='n1'):
     return butler
 newButler()
 
-class AidenPi(object):
+class AidanPi(object):
     def __init__(self, name, host, port=9999, logLevel=logging.INFO):
-        """Command one of Aiden's pi programs. """
+        """Command one of Aidan's pi programs. """
 
         self.host = host
         self.port = port
@@ -68,7 +68,7 @@ class AidenPi(object):
         self.logger.setLevel(logLevel)
 
     def __str__(self):
-        return f"AidenPi(name={self.name}, host={self.host}, port={self.port})"
+        return f"AidanPi(name={self.name}, host={self.host}, port={self.port})"
 
     def __repr__(self):
         return self.__str__()
@@ -122,7 +122,7 @@ class PlateIlluminator:
 
         if ip is None:
             ip = 'platepi'
-        self.dev =  AidenPi('plate', ip, logLevel=logLevel)
+        self.dev =  AidanPi('plate', ip, logLevel=logLevel)
 
         self.logger = logging.getLogger('plate')
         self.logger.setLevel(logLevel)
@@ -303,7 +303,7 @@ class GimbalIlluminator(Illuminator):
     knownLampTypes = {'led', 'mono'}
 
     def __init__(self, cam, forceLedOff=True, logLevel=logging.INFO, ip=None,
-                 lampType='led'):
+                 lampType='mono'):
 
         self.cam = cam
 
@@ -319,7 +319,7 @@ class GimbalIlluminator(Illuminator):
 
         if ip is None:
             ip = 'gimbalpi'
-        self.dev =  AidenPi('gimbal', ip, logLevel=logLevel)
+        self.dev =  AidanPi('gimbal', ip, logLevel=logLevel)
 
         self.preloadDistance = 50
 
