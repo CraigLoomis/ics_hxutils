@@ -1175,6 +1175,22 @@ def writeSpotMeasures(butler, df):
 def writeDitherMeasures(butler, df):
     return _writeMeasures(butler, df, 'ditherMeasures')
 
+def readMeasures(butler=None, measureType=None,
+                 experimentName=None, visit=None,
+                 pfsDay='*', cam=None):
+    measureTypes = {'raw', 'spot', 'dither'}
+    if butler is None:
+        butler = newButler(experimentName=experimentName, cam=cam)
+    if measureType not in measureTypes:
+        raise ValueError(f'measureType must be one of {measureTypes}')
+    if measureType == 'spot':
+        typeName = 'measures'
+    else:
+        typeName = f'{measureType}Measures'
+    dithMeasPath = butler.search(typeName, visit=visit, pfsDay=pfsDay)[0]
+    dithMeas = pd.read_csv(dithMeasPath, sep='\s+')
+    return dithMeas
+
 def trimRect(im, c, r=100):
     cx, cy = c
     im2 = im[cy-r:cy+r, cx-r:cx+r]
