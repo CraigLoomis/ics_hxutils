@@ -3,9 +3,10 @@ from importlib import reload
 import numpy as np
 import fitsio
 
-from . import hxstack as hx
-reload(hx)
+from . import pathUtils
+from . import hxcalib
 
+reload(hxcalib)
 class DarkCube(object):
     def __init__(self, cube=None, visits=None, center=None):
         self._cube = cube
@@ -40,7 +41,8 @@ class DarkCube(object):
 
     @classmethod
     def createFromVisits(cls, visits, cam=None):
-        cube = hx.medianCubes(visits, cam=cam)
+        paths = [pathUtils.rampPath(v, cam=cam) for v in visits]
+        cube = hxcalib.medianCubes(paths)
 
         self = cls(cube, visits=visits)
         return self
