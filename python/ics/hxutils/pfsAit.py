@@ -347,7 +347,7 @@ def fetchLimitPlane(df, name):
     focusFrame = pd.DataFrame(ret, columns=['row', 'wave', 'focus', 'coeffs'])
     return focusFrame
 
-def focusColor(focus, center=None, limits=None):
+def focusColor(focus, center, limits):
     """[Return a color from a colormap hinged at a center value.
 
     Args:
@@ -449,7 +449,7 @@ def dispPlane(df, name, req=None, plotRange=None, pl=None,
         req = df[name].mean()
 
     if plotRange is None:
-        plotRange = (df[name].min(), df[name].max())
+        plotRange = [df[name].min(), df[name].max()]
     if plotRange[1] is None:
         plotRange[1] = req
 
