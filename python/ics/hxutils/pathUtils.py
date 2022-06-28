@@ -1,11 +1,17 @@
 # This is junk for old JHU data
 
 import glob
+import logging
 import os
 import pathlib
 
 import fitsio
 import numpy as np
+
+from . import hxramp
+
+logger = logging.getLogger('')
+logger.setLevel(logging.INFO)
 
 rootDir = "/data/ramps"
 calibDir = "/data/pfsx/calib"
@@ -45,6 +51,41 @@ def rampPath(visit=-1, cam=None, prefix=None):
         return sorted(ramps)[visit]
     else:
         return ramps[0]
+
+def getPathsBetweenVisits(visit0, visitN=None, dateGlob='2022*', cam='n3'):
+    if visitN is not None and visitN < visit0:
+        raise ValueError('valueN must not be smaller than visit0')
+
+    fileGlob = f'{sitePrefix}*{cam[-1]}3.fits'
+    ramps = glob.glob(os.path.join(rootDir, dateGlob, fileGlob))
+    ramps =  sorted(ramps)
+
+    # import pdb; pdb.set_trace()
+    visit0Pat = f'{sitePrefix}{visit0:06d}{cam[-1]}3.fits'
+    logger.warning(f'checking {len(ramps)} against {visit0Pat}')
+    if visitN is not None:
+        visitNPat = f'{sitePrefix}{visitN:06d}{cam[-1]}3.fits'
+    startAt = None
+    for p_i, p in enumerate(ramps):
+        if p.endswith(visit0Pat):
+            logger.warning(f'matched start {p} against {visit0Pat}')
+            startAt = p_i
+            break
+    if startAt is None:
+        return []
+
+    if visitN is None:
+        return ramps[startAt:]
+
+    endAt = startAt
+    for p_i, p in enumerate(ramps[startAt:]):
+        if p.endswith(visitNPat):
+            logger.warning(f'matched end {p} against {visitNPat}')
+            endAt += p_i + 1
+            break
+
+    return ramps[startAt:endAt]
+
 
 def lastRamp(prefix=None, cam=None):
     return rampPath(visit=-1, cam=cam, prefix=prefix)
