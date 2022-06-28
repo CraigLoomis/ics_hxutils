@@ -147,7 +147,7 @@ def ingestTestData(butler, visit0, visitN=None, overwrite=False, cam='n3'):
             troom2 = hdr['W_TPTMP6']
 
             newData.append([v, ts, testName,
-                            exptime, np.round(med,4), np.round(clippedMean, 4), np.round(s, 4),
+                            exptime, np.round(med, 5), np.round(clippedMean, 5), np.round(s, 5),
                             ttp, tfr, tdet, tasic,
                             tshield2, tshield1, tspreader, tmangin,
                             tbody1, tbody2, tbody3, tbody4,
@@ -227,6 +227,7 @@ def plotSingleTest(plot, data, prop, testName=None,
         x = testData.index
     label = f'{label} : {testData[prop].mean():0.4f}'
     ax = plot.plot(x, testData[prop], '+', color=color,
+                   alpha=0.75,
                    label=label)[0]
     plot.grid(axis='both', which='both', alpha=0.5)
     plot.tick_params(axis='both', labelsize=7)

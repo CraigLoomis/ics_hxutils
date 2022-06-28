@@ -324,13 +324,16 @@ def plotRefs(fname, reads=None, refRows=None, r0=0):
         #p2.plot(np.median(left, axis=0))
         #p2.plot(np.median(right, axis=0))
 
-def focusPlot(sweep, p=None, title=None, sizeOnly=True):
+def focusPlot(sweep, p=None, title=None, sizeOnly=True, dithers=False, yrange=None):
     if p is None:
         f,p1 = plt.subplots(num='focusPlot', clear=True)
     else:
         f = None
         p1 = p
-    
+
+    if len(sweep) == 0:
+        return f, 0, None
+
     if title is None:
         title = f"{sweep['wavelength'].values[0]:0.0f} @ {sweep['row'].values[0]:0.0f}"
         
@@ -351,7 +354,13 @@ def focusPlot(sweep, p=None, title=None, sizeOnly=True):
     p1.legend(fontsize='x-small')
     p1.grid(alpha=0.2)
     p1.set_title(title)
-        
+    if yrange is not None:
+        p1.set_ylim(*yrange)
+    elif dithers:
+        p1.set_ylim(15, 35)
+    else:
+        p1.set_ylim(0, 5)
+
     return f, minx, poly(minx)
 
 def focusOffsetPlot(meade, focusResults, visit=None):
@@ -415,6 +424,7 @@ def dispIrpPanel(ramp, disp, r0=1, r1=-1):
     disp.set('frame delete all')
     disp.set('frame lock image')
     disp.set('tile grid')
+    disp.set('tile grid mode automatic')
     disp.set('tile yes')
     disp.set('scale zscale')
     disp.set('scale linear')
@@ -479,7 +489,32 @@ def dispCdsRamp(ramp, disp, r0=1, r1=-1):
 
     disp.set('scale zscale')
 
-def dispStackedVisits(disp, visits, cam, doClear=True, r0=0, r1=-1):
+def dispStackedVisits(disp, visits, cam, doClear=True, medSubtract=True,
+                      r0=0, r1=-1):
+    """Display the sum of a list of visit CDSes.
+
+    Parameters
+    ----------
+    disp : DS9
+        The DS9 display to write to
+    visits : array of int
+        The visits to load
+    cam : `str`
+        The name of the camera -- e.g. "n3"
+    doClear : bool, optional
+        Whether to delete all existing frames in the display, by default True
+    medSubtract : bool, optional
+        Whether to subract off the median background from all CDSes, by default True
+    r0 : int, optional
+        For each ramp, the first read of the CDS, by default 0
+    r1 : int, optional
+        For each ramp, the last read on the CDS, by default -1
+
+    Returns
+    -------
+    image : np.array
+        The data image which we displayed.
+    """
     if doClear:
         disp.set('frame delete all')
         disp.set('frame lock image')
@@ -492,6 +527,8 @@ def dispStackedVisits(disp, visits, cam, doClear=True, r0=0, r1=-1):
     for v in visits:
         path = hx.rampPath(v, cam=cam)
         cds = hxramp.HxRamp(path).cdsN(r0=r0, r1=r1)
+        if medSubtract:
+            cds -= np.median(cds)
         if stackedImage is None:
             stackedImage = cds
         else:
@@ -594,9 +631,9 @@ def setupDisp(disp, doClear=True, zoom=8, tileGrid=None,
     ds9CmdStr = '; '.join(ds9Cmds)
     disp.set(ds9CmdStr)
 
-def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=None,
-              zoom=8, cam=None, lockImage=False, lockScale=True, badMask=None, doOrder=True,
-              scaleType='asinh', scaleLimits=None):
+def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=None, hxcalib=None,
+              zoom=8, lockImage=False, lockScale=True, badMask=None, doOrder=True,
+              scaleType='asinh', scaleLimits=None, ims=None, targetPos=False):
     """Show a grid of images centered on their spots."""
 
     if tileGrid is not None:
@@ -614,18 +651,24 @@ def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=No
               lockImage=lockImage, lockScale=lockScale,
               scaleType=scaleType, scaleLimits=scaleLimits)
 
-    for i, row in df.iterrows():
+    for i_i, (i, row) in enumerate(df.iterrows()):
         disp.set('frame new')
-        ramp = hxramp.HxRamp(hxramp.rampPath(visit=row['visit'], cam=cam))
-        cds = ramp.cdsN(r1=r1)
-        cds -= np.median(cds)
+        if ims is None:
+            if hxcalib is not None:
+                cds = hxcalib.isr(visit=row.visit, r1=r1)
+            else:
+                ramp = hxramp.HxRamp(pathUtils.rampPath(visit=row['visit'], cam=meade.cam))
+                cds = ramp.cdsN(r1=r1)
+            cds -= np.median(cds)
+        else:
+            cds = ims[i_i]
         disp.set_np2arr(cds)
         if badMask is not None:
             setMask(disp, badMask)
         if not lockImage:
-            xpix, ypix = getPix(row, meade)
+            xpix, ypix = getPix(row, meade, targetPos=targetPos)
             disp.set(f'pan to {xpix} {ypix} image')
-            logger.info(f'{row.wavelength} {row["row"]:0.1f} {xpix:0.2f} {ypix:0.2f}')
+            logger.info(f'{row.wavelength:6.1f} {row["row"]:6.0f} {xpix:8.2f} {ypix:8.2f}')
         else:
             logger.info(f'{row.wavelength} {row.row}, {row.focus}')
 
@@ -652,14 +695,14 @@ def ditherName(butler, group, pfsDay='*'):
 
     key = dict(focus=focus,
                wavelength=group.wavelength.unique()[0],
-               visit=group.visit.min(),
+               visit=int(group.visit.min()),
                row=row)
 
     path = butler.search('dither', pfsDay=pfsDay, **key)
     return path[0]
 
-def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7,
-                scaleType='asinh', scaleLimits=None, lockImage=True,
+def dispDithers(disp, butler, ditherSet, wavelength, zoom=8,
+                scaleType='asinh', scaleLimits=None,
                 badMask=None, pfsDay='*'):
     """Generate the canonical dither display: one page per wavelength, focus values per column."""
 
@@ -671,6 +714,44 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7,
     nfocus = len(waveDither.focus.unique())
 
     setupDisp(disp, doClear=True, zoom=zoom, tileGrid=(nfocus, nrows),
+              lockImage=False, lockScale=True,
+              scaleType=scaleType, scaleLimits=scaleLimits)
+
+    for name, group in waveGroups:
+        path = ditherName(butler, group, pfsDay=pfsDay)
+        print(name, path)
+
+        im, hdr = fitsio.read(path, header=True)
+        try:
+            ctr = int(round(hdr['XPIX'])), int(round(hdr['YPIX']))
+        except KeyError:
+            ctr = [0,0]
+
+        disp.set("frame new")
+        if badMask is not None:
+            rad = im.shape[0]//(3*2)
+            xslice = slice(ctr[0]-rad, ctr[0]+rad)
+            yslice = slice(ctr[1]-rad, ctr[1]+rad)
+
+            imask = badMask[yslice, xslice]
+            setMask(disp, imask)
+        disp.set_np2arr(im)
+
+    return waveGroups
+
+def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8,
+                       scaleType='asinh', scaleLimits=None,
+                       badMask=None, pfsDay='*'):
+    """Generate a single-focus dither display"""
+
+    focusDither = ditherSet[ditherSet.focus == focus].copy()
+    focusDither = focusDither.sort_values(['row', 'wavelength'], ascending=[False, False])
+    waveGroups = focusDither.groupby(['wavelength', 'row'], sort=False)
+
+    nrows = len(focusDither.row.unique())
+    nwaves = len(focusDither.wavelength.unique())
+
+    setupDisp(disp, zoom=zoom, tileGrid=(nwaves, nrows),
               lockImage=False, lockScale=True,
               scaleType=scaleType, scaleLimits=scaleLimits)
 
@@ -692,34 +773,20 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8, scale=99.7,
 
     return waveGroups
 
-def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8, scale=99.7,
-                       scaleType='asinh', scaleLimits=None,
-                badMask=None, pfsDay='*'):
-    """Generate a single-focus dither display"""
+def dispDitherDetails(disp, butler, ditherSet):
+    setupDisp(disp)
 
-    focusDither = ditherSet[ditherSet.focus == focus].copy()
-    focusDither = focusDither.sort_values(['row', 'wavelength'], ascending=[False, False])
-    waveGroups = focusDither.groupby(['wavelength', 'row'], sort=False)
+def dispTransform(df, meade, scale=1.0, title=''):
+    # updateTargets(df, meade)
+    try:
+        plt.close('xform')
+    except:
+        pass
+    f, pl = plt.subplots(num='xform', clear=True)
 
-    nrows = len(focusDither.row.unique())
-    nwaves = len(focusDither.wavelength.unique())
+    q = pl.quiver(df.xpix0, df.ypix0, df.xpix-df.xpix0, df.ypix-df.ypix0,
+                  width=0.003) # , scale_units='xy', scale=10)
+    pl.quiverkey(q, X=0.9, Y=1.05, U=scale, label=f'{scale:0.0f} pix resid', labelpos='E', alpha=0.6)
+    f.suptitle(f'Gimbalator step->pix visit={df.visit.min()} {title}')
 
-    setupDisp(disp, zoom=zoom, scaleType=scaleType, scaleLimits=scaleLimits)
-
-    for name, group in waveGroups:
-        path = ditherName(butler, group, pfsDay=pfsDay)
-        print(name, path)
-
-        im, hdr = fitsio.read(path, header=True)
-        ctr = int(round(hdr['XPIX'])), int(round(hdr['YPIX']))
-        rad = im.shape[0]//(3*2)
-        xslice = slice(ctr[0]-rad, ctr[0]+rad)
-        yslice = slice(ctr[1]-rad, ctr[1]+rad)
-
-        disp.set("frame new")
-        if badMask is not None:
-            imask = badMask[yslice, xslice]
-            setMask(disp, imask)
-        disp.set_np2arr(im)
-
-    return waveGroups
+    return f
