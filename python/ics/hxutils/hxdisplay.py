@@ -537,15 +537,17 @@ def dispStackedVisits(disp, visits, cam, doClear=True, medSubtract=True,
     disp.set('frame new')
     disp.set_np2arr(stackedImage)
 
-def getPix(row, meade):
-    """For a reading get the center pixel. Use measurement is available, else the steps. """
-    try:
-        xpix, ypix = row['xpix'], row['ypix']
-        if np.isnan(xpix):
-            raise ValueError()
-    except:
-        xpix, ypix = meade.stepsToPix([row['xstep'], row['ystep']])
+    return stackedImage
 
+def getPix(row, meade, targetPos=False):
+    """For a reading get the center pixel. Use measurement is available, else the steps. """
+
+    xpix, ypix = meade.stepsToPix([row['xstep'], row['ystep']])
+    if targetPos:
+        return xpix, ypix
+
+    if 'xpix' in row and not np.isnan(row['xpix']):
+        xpix, ypix = row['xpix'], row['ypix']
     return xpix, ypix
 
 def dispMask(disp, alpha=0.5):
