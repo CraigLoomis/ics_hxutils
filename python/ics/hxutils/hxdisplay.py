@@ -133,7 +133,7 @@ def regShow(stack, slices, display, r0=0, diffs='last', matchScales=True):
     _read = stack.getRead(-1)
     read = _read[slices]
     display.set_np2arr(read)
-    
+
     for i, r_i in enumerate(range(r0, stack.nreads)):
         display.set('frame new')
         _read = stack.getRead(r_i)
@@ -150,9 +150,9 @@ def regShow(stack, slices, display, r0=0, diffs='last', matchScales=True):
             read = dread
         else:
             read -= med0
-        
+
         display.set_np2arr(read)
-        
+
     if matchScales:
         display.set('match scalelimits')
         display.set('frame 2')
@@ -160,11 +160,11 @@ def regShow(stack, slices, display, r0=0, diffs='last', matchScales=True):
         display.set('frame 1')
         display.set('scale zscale')
 
-def imStats(stack, r0=1, r1=-1, 
+def imStats(stack, r0=1, r1=-1,
             slices=None, width=None, doDark=True,
             sigClip=None):
     im1 = stack.getRead(r1)
-    
+
     if r0 is None:
         dim = im1
         if doDark:
@@ -176,20 +176,20 @@ def imStats(stack, r0=1, r1=-1,
             dim -= darkCache[stack.normIdx(r1) - stack.normIdx(r0)]
     if slices:
         dim = dim[slices]
-    
+
     fig, pl = plt.subplots()
     p0 = pl
     mn = np.mean(dim)
     sd = np.std(dim)
-    
+
     if sigClip is not None:
         flatIm = dim.flatten()
         keep_w = np.where((flatIm > mn-sigClip*sd) & (flatIm < mn+sigClip*sd))
         mn = np.mean(flatIm[keep_w])
         sd = np.std(flatIm[keep_w])
-        
+
         print("clipped %d -> %d" % (len(flatIm), len(keep_w[0])))
-        
+
     if width is None:
         xrange = mn-3*sd, mn+3*sd
     elif width is False:
@@ -200,13 +200,13 @@ def imStats(stack, r0=1, r1=-1,
     print("%0.3f %0.3f" % (mn, sd))
     p0.hist(dim.flatten(), normed=True,
             bins=100, range=xrange,
-            label="$\mu=%0.2f$ $\sigma=%0.2f$ $kept=%0.2f$" % (mn, sd, 
+            label="$\mu=%0.2f$ $\sigma=%0.2f$ $kept=%0.2f$" % (mn, sd,
                                                                (1 if sigClip is None else len(keep_w[0])/len(flatIm))))
 
     p0.legend()
-    
+
     return fig, mn, sd
-    
+
 def isrShow(fpath, display, hxCalib, removeBackground=False, r0=0, r1=-1):
     im = hxCalib.isr(fpath)
     if removeBackground:
@@ -217,11 +217,11 @@ def isrShow(fpath, display, hxCalib, removeBackground=False, r0=0, r1=-1):
     display.set('frame new')
     display.set('scale zscale')
     display.set_np2arr(im)
-    
-def imShow(fpath, display, r0=1, r1=-1, darkRamp=None, 
+
+def imShow(fpath, display, r0=1, r1=-1, darkRamp=None,
            showAll=False, doCorrect=True, matchDarkLevel=False):
     stack = hx.ramp(fpath)
-    
+
     display.set('frame delete all')
     display.set('tile grid; tile yes')
     display.set('zoom to fit')
@@ -260,29 +260,29 @@ def imShow(fpath, display, r0=1, r1=-1, darkRamp=None,
             display.set_np2arr(darkSum)
 
 def plotRefs(fname, reads=None, refRows=None, r0=0):
-    fig, plots = plt.subplots(nrows=4, sharex=True, 
+    fig, plots = plt.subplots(nrows=4, sharex=True,
                               figsize=(10,8))
     p1, p2, p3, p4 = plots
-    
+
     refWidth = 4
-    
+
     stack = hx.ramp(fname)
 
     if refRows is None:
         refRows = range(refWidth)
     refRows = np.array(refRows, dtype='i2')
-    
+
     if reads is None:
         reads = range(r0, hx.rampNreads(stack))
     for i in reads:
         im = hx.rampRead(stack, i)
-        
+
         bottom = im[0:refWidth, :]
         top = im[-1:-refWidth-1:-1, :]
 
         left = im[:, 0:refWidth].T
         right = im[:, -1:-refWidth-1:-1].T
-    
+
         #p1.set_prop_cycle(None)
         for i in refRows:
             p1.plot(bottom[i])
@@ -301,7 +301,7 @@ def plotRefs(fname, reads=None, refRows=None, r0=0):
 
     #p1.plot(np.median(bottom, axis=0), 'magenta', alpha=0.5)
     #p2.plot(np.median(top, axis=0), 'magenta', alpha=0.5)
-    
+
     _yrange1 = p1.get_ylim()
     _yrange2 = p2.get_ylim()
     yrange = (min(_yrange1[0], _yrange2[0]),
@@ -318,7 +318,7 @@ def plotRefs(fname, reads=None, refRows=None, r0=0):
 
     filename = os.path.basename(fname)
     p1.set_title('file=%s rows=%s' % (filename, refRows))
-    
+
     fig.tight_layout()
 
         #p2.plot(np.median(left, axis=0))
@@ -336,7 +336,7 @@ def focusPlot(sweep, p=None, title=None, sizeOnly=True, dithers=False, yrange=No
 
     if title is None:
         title = f"{sweep['wavelength'].values[0]:0.0f} @ {sweep['row'].values[0]:0.0f}"
-        
+
     sweep = sweep.sort_values(by=['focus'])
 
     minx, poly = nirander.getBestFocus(sweep)
@@ -344,7 +344,7 @@ def focusPlot(sweep, p=None, title=None, sizeOnly=True, dithers=False, yrange=No
         p1.plot(sweep.focus, sweep.x2, '+-', alpha=0.3, label='x')
         p1.plot(sweep.focus, sweep.y2, '+-', alpha=0.3, label='y')
     p1.plot(sweep.focus, sweep['size'], '+-', alpha=0.75, label='size')
-    
+
     xx = np.linspace(sweep.focus.min(), sweep.focus.max()+1, 100)
     yy = poly(xx)
     # print(f'{title}: {minx:0.2f}, {poly(minx):0.2f}')
@@ -381,7 +381,7 @@ def dispVisits(disp, visits, r0=0, r1=-1, cam='n1', doClear=True):
     if isinstance(visits, int):
         visits = [visits]
     for v in visits:
-        path = hx.rampPath(v, cam=cam)
+        path = pathUtils.rampPath(v, cam=cam)
         cds = hxramp.HxRamp(path).cdsN(r0=r0, r1=r1)
         disp.set('frame new')
         disp.set_np2arr(cds)
