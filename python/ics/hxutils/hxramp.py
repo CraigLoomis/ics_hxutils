@@ -615,3 +615,5 @@ def refPixel4(im, doRows=True, doCols=True, nCols=4, nRows=4, colWindow=4):
 
     return corrImage, ampRefMeans, corr1Image, rowRefs, sideRefImage, sideCorr
 
+def load(path):
+    return HxRamp(path)
