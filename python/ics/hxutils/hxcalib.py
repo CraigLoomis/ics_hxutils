@@ -1,7 +1,11 @@
+import logging
+
 import numpy as np
 
 from ics.hxutils import hxramp
 from ics.hxutils import pathUtils
+
+logger = logging.getLogger('hxcalib')
 
 def medianCubes(paths, r0=0, r1=-1):
     """ Given visits, return a supervisit of CDSs, where each CDS is the median of the visit CDSs.
@@ -135,3 +139,16 @@ def badMask(ramp, r0thresh=5000):
     finalMask = (r0mask * 0x01).astype('i4')
 
     return finalMask
+
+singleReadTime = 5.429
+detectorGains = dict(n1=7.78, n3=7.78, n9=7.78, n8=6.59) # uV/e-
+
+def calcGain(preampGain, cam):
+    logger.warning(f'BAD Craig is still using cam, not detector id.')
+    detGain = detectorGains[cam]
+
+    adcInput = detGain * preampGain # uV/e-
+    adcRange = 2200000 # uV
+    adcGain = adcInput / adcRange * 65536 # ADU/e-
+
+    return 1/adcGain

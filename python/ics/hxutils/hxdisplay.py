@@ -21,23 +21,22 @@ reload(nirander)
 logger = logging.getLogger('hxdisplay')
 logger.setLevel(logging.INFO)
 
-def camFromPath(fname):
-    p = pathlib.Path(fname)
-    return 'n' + p.stem[-2]
-
 def regStats(fpath, slices=None, r0=0, r1=-1, fitr0=1, fitr1=-1, doDiffs=False,
-             residMax=-1, order=1, preampGain=None):
+             residMax=-1, order=1, preampGain=True):
 
     ramp = hxramp.HxRamp(fpath)
     nreads = ramp.nreads
     width = ramp.width
 
-    readTime = (width / 4096) * hxcalib.singleReadTime
-    if preampGain is not None:
-        adcGain = hxcalib.calcGain(preampGain, camFromPath(fpath))
-    else:
+    readTime = ramp.frameTime
+    if preampGain is False:
         preampGain = 1.0
         adcGain = 1.0
+    elif preampGain is not True:
+        adcGain = hxcalib.calcGain(preampGain, ramp.cam)
+    else:
+        preampGain = ramp.preampGain
+        adcGain = hxcalib.calcGain(preampGain, ramp.cam)
 
     print(f"hreads={nreads} readTime={readTime} adcGain={adcGain}")
     fig, plots = plt.subplots(nrows=2, figsize=(10,6), sharex=True)
