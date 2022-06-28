@@ -1243,7 +1243,7 @@ def getPeaks(im, thresh=250.0, mask=None, center=None, radius=10,
     spotsFrame.loc[spotsFrame.ellipticity < 1,
                    'ellipticity'] = 1/spotsFrame.loc[spotsFrame.ellipticity < 1,
                                                      'ellipticity']
-    if center is not None:
+    if center is not None and searchRadius > 0:
         center = np.atleast_2d(center)
         keep_w = cdist(spotsFrame[["x","y"]], center) <= searchRadius
         spotsFrame = spotsFrame.loc[keep_w]
