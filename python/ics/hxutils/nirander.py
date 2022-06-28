@@ -1439,13 +1439,17 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
             # Try for a measured position. Failing that, use the steps.
             center_i = (scans.loc[scan_i, 'xpix'], scans.loc[scan_i, 'ypix'])
             if np.isnan(center_i[0]) or np.isnan(center_i[1]):
-                try:
-                    stepCenter = (scans.loc[scan_i, 'xstep'], scans.loc[scan_i, 'ystep'])
-                    center_i = meade.stepsToPix(stepCenter)
-                    logger.info((f"{scan_i} center from steps: {center_i}"))
-                except Exception as e:
-                    logger.warn(f'failed to get a center for {scans.loc[scan_i]}: {e}')
-                    center_i = None
+                center_i = (scans.loc[scan_i, 'xpix0'], scans.loc[scan_i, 'ypix0'])
+                if np.isnan(center_i[0]) or np.isnan(center_i[1]):
+                    try:
+                        stepCenter = (scans.loc[scan_i, 'xstep'], scans.loc[scan_i, 'ystep'])
+                        center_i = meade.stepsToPix(stepCenter)
+                        logger.info((f"{scan_i} center from steps: {center_i}"))
+                    except Exception as e:
+                        logger.warn(f'failed to get a center for {scans.loc[scan_i]}: {e}')
+                        center_i = None
+                else:
+                    logger.info((f"{scan_i} center from pix0: {center_i}"))
             else:
                 logger.info((f"{scan_i} center from pix: {center_i}"))
 
