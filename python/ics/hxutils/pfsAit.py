@@ -589,12 +589,32 @@ def dispFocusPlots(df, title=None, yrange=None):
 
     return f
 
-def dispOffsets(df, title=None, yrange=None, focus=None, perSpot=True):
+def dispOffsets(df, title=None, yrange=None, focus=None, perSpot=True,
+                figsize=(10,10)):
+    """Diagnostic plots for dither repeats
+
+    Parameters
+    ----------
+    df : DataFrame
+        The measured positions
+    title : str, optional
+        plot title, by default something visit-based
+    yrange : tuple, optional
+        The height of the plots in pixels, by default None
+    focus : int, optional
+        Which focus to select, by default None
+    perSpot : bool, optional
+        For multiples, whether to register to LL corner, by default True
+
+    Returns
+    -------
+    figure : matplotlib.Figure
+    """
     nrows = len(df.row.unique())
     ncols = len(df.wavelength.unique())
 
     f, pl = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, sharey=True,
-                         figsize=(10,10), squeeze=False)
+                         figsize=figsize, squeeze=False)
 
     for r_i in range(nrows):
         pl[r_i,0].set_ylabel('dither offset (15um pix)')
