@@ -62,6 +62,7 @@ class AidanPi(object):
     def __init__(self, name, host, port=9999, logLevel=logging.INFO):
         """Command one of Aidan's pi programs. """
 
+        self.name = name
         self.host = host
         self.port = port
         self.logger = logging.getLogger(name)
@@ -346,7 +347,7 @@ class GimbalIlluminator(Illuminator):
         transformClass = self._resolveTransform(cfg['geometry']['transformClass'])
         coeffs = cfg['geometry']['transformCoeffs']
         if isinstance(coeffs, (list, tuple)):
-            assert len(coeffs) == 2, "lists of coeffs be len=2"
+            assert len(coeffs) == 2, "lists of coeffs must be len=2"
 
             self._stepToPix = transformClass(np.array(coeffs[0]))
             self._pixToStep = transformClass(np.array(coeffs[1]))
@@ -587,7 +588,8 @@ def moveFocus(cam, piston):
     pfsutils.oneCmd(f'xcu_{cam}', f'motors moveFocus microns={piston} abs')
     lastFocus = piston
 
-def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True):
+def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True,
+              windowRow=None, windowHeight=None):
     """Move to the given positions and acquire spots.
 
     This can be used to acquire dithers or a larger grid of spots.
@@ -640,6 +642,13 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True)
             else:
                 xStep, yStep = x, y
 
+            if windowRow is not None:
+                _setRowWindow(meade, windowRow, windowHeight)
+            elif windowHeight is not None:
+                if not posInPixels:
+                    raise RuntimeError("need pos in pixels to window")
+                _setRowWindow(meade, y, windowWidth)
+
             # We want to always move in the same direction: from low.
             preload = (xStep < lastXStep or yStep < lastYStep)
             meade.moveToSteps(xStep, yStep, preload=preload)
@@ -654,6 +663,9 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True)
 
     if led is not None:
         meade.lampsOff()
+
+    if windowRow is not None:
+        _clearRowWindow(meade)
 
     if call is None:
         return pd.concat(callRet, ignore_index=True)
@@ -919,7 +931,7 @@ def ditherAtPix(meade, pos, npos=3, nread=3, xsteps=5, ysteps=2):
 
     return ditherVisits
 
-def _setRowWindow(meade, row, windowWidth):
+def _setRowWindow(meade, row, windowWidth=50):
     """Configure H4 row skipping to straddle a row
 
     Parameters
@@ -939,6 +951,10 @@ def _setRowWindow(meade, row, windowWidth):
     pfsutils.oneCmd(f'hx_{meade.cam}',
                     f'setRowSkipping skipSequence=4,{skipToWindow},{2*windowWidth},'
                     f'{skipToTopRef},{2*windowWidth + 8}')
+
+def _clearRowWindow(meade):
+    pfsutils.oneCmd(f'hx_{meade.cam}',
+                    f'clearRowSkipping')
 
 def _loopByWaves(meade, butler, waves, rows, focus,
                  doDither=False, nread=3, doWindow=True, windowWidth=50):
