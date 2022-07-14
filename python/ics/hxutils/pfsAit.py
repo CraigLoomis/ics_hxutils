@@ -390,7 +390,7 @@ def dispFocusPlane0(df, focusCenter=None, pl=None):
         focusCenter =  focusGrid.focus.mean()
     focusObj = []
     for row in focusGrid.itertuples():
-        o = pl.plot(row.wave, row.row, 'o', markersize=20,
+        o = pl.plot(row.wavelength, row.row, 'o', markersize=20,
                     color=focusColor(row.focus, focusCenter, focusRange))
         focusObj.append(o)
 
@@ -423,7 +423,7 @@ def dispFocusPlane(df, focusCenter=None, focusRange=None, pl=None, cmapName='RdB
                                    vmin=focusRange[0], vmax=focusRange[1])
     cmap = plt.get_cmap(cmapName)
     colors = focusColor(focusGrid.focus, focusCenter, focusRange)
-    o = pl.scatter(focusGrid.wave, focusGrid.row, c=focusGrid.focus, marker='o', s=300,
+    o = pl.scatter(focusGrid.wavelength, focusGrid.row, c=focusGrid.focus, marker='o', s=300,
                    norm=norm, cmap=cmap)
     plt.colorbar(o, ax=pl, fraction=0.1, pad=0.01)
     xticks = mpl.ticker.FixedLocator(df.wavelength.unique())
@@ -462,10 +462,10 @@ def dispPlane(df, name, req=None, plotRange=None, pl=None,
         normVals = req/df[name]
 
     norm = mpl.colors.TwoSlopeNorm(vcenter=req, vmin=plotRange[0], vmax=plotRange[1])
-    o = pl.scatter(df.wave, df.row, s=markersize*normVals, cmap=cmap, norm=norm,
+    o = pl.scatter(df.wavelength, df.row, s=markersize*normVals, cmap=cmap, norm=norm,
                    c=df[name],
                    marker='o')
-    xticks = mpl.ticker.FixedLocator(df.wave.unique())
+    xticks = mpl.ticker.FixedLocator(df.wavelength.unique())
     yticks = mpl.ticker.FixedLocator(df.row.unique())
     pl.xaxis.set_major_locator(xticks)
     pl.yaxis.set_major_locator(yticks)
@@ -504,7 +504,7 @@ def dispSizes(df, atFocus=None, focusRange=None, title=None):
     for name,grp in grps:
         mm.append((name[0], name[1], grp.ee1.max(), grp.ee3.max(), grp.ee5.max(),
                    grp['size'].min()))
-    spotees = pd.DataFrame(mm, columns=['wave', 'row', 'ee1', 'ee3', 'ee5', 'size'])
+    spotees = pd.DataFrame(mm, columns=['wavelength', 'row', 'ee1', 'ee3', 'ee5', 'size'])
     spotees['focus'] = atFocus
 
     def _makePlotRange(name, req, under=0.5, over=1.1):
@@ -552,7 +552,7 @@ def dispEEPlane(df, name, focusCenter=None):
     focusObj = []
     for row in focusGrid.itertuples():
         logger.info(f'row={row}')
-        o = pl.plot(row.wave, row.row, 'o', markersize=20,
+        o = pl.plot(row.wavelength, row.row, 'o', markersize=20,
                     color=focusColor(row[name], focusCenter, focusRange))
         focusObj.append(o)
 
