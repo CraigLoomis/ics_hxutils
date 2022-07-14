@@ -589,8 +589,88 @@ def dispFocusPlots(df, title=None, yrange=None):
 
     return f
 
+def dispFocusPanel(df, title=None, metric='size'):
+    """Generate a two panel best focus figure.
+
+    Parameters
+    ----------
+    df : `pandas.DataFrame`
+        The spot or dither measurements.
+    title : `str`, optional
+        Additional test for the title, by default None
+    metric : `str`, optional
+        The df column name to plot.
+
+    Returns
+    -------
+    fig : `plt.figure`
+        The Figure we plotted to.
+    """
+    
+
+    f, pl = plt.subplots(nrows=1, ncols=2, sharex=True, sharey=True,
+                         figsize=(10,5))
+    for p in pl:
+        p.set_aspect('equal')
+    p1, p2 = pl
+    focusImg = np.zeros(shape=(len(df.row.unique()), len(df.wavelength.unique())))
+    sizeImg = np.zeros(shape=(len(df.row.unique()), len(df.wavelength.unique())))
+                 
+    for w_i, w in enumerate(sorted(df.wavelength.unique())[::-1]):
+        for r_i, r in enumerate(sorted(df.row.unique())[::-1]):
+            sweep = df.loc[(df.wavelength == w) & (df.row == r)]
+            sweep = sweep.sort_values(by=['focus'])
+
+            minx, poly = nirander.getBestFocus(sweep, metric)
+            focusImg[r_i, w_i] = minx
+            sizeImg[r_i, w_i] = poly(minx)
+            
+    fp = p1.imshow(focusImg, cmap='viridis')
+    sp = p2.imshow(sizeImg, cmap='viridis')
+    finalTitle = f'best focus from visits={df.visit.min()}..{df.visit.max()}'
+    if title is not None:
+        finalTitle = f'{finalTitle} {title}'
+    f.suptitle(finalTitle)
+    
+    fcb = plt.colorbar(fp, ax=p1, fraction=0.1, pad=0.01, format='%0.3f')
+    scb = plt.colorbar(sp, ax=p2, fraction=0.1, pad=0.01, format='%0.3f')
+
+    if True:
+        # Strange stuff to get wavelength and row ticks for the images.
+        def waveLabel(x, pos, vals=df.wavelength.unique()):
+            try:
+                return str(vals[pos])
+            except IndexError:
+                return "oops"
+        def rowLabel(x, pos, vals=df.row.unique()[::-1]):
+            try:
+                return str(vals[pos])
+            except IndexError:
+                return "oops"
+
+        xticks = mpl.ticker.IndexLocator(1,0.5)
+        yticks = mpl.ticker.IndexLocator(1,0.5)
+
+        xlabeller = mpl.ticker.FuncFormatter(waveLabel)
+        ylabeller = mpl.ticker.FuncFormatter(rowLabel)
+        p1.xaxis.set_major_locator(xticks)
+        p1.yaxis.set_major_locator(yticks)
+        p1.xaxis.set_major_formatter(xlabeller)
+        p1.yaxis.set_major_formatter(ylabeller)
+
+    p1.set_title('FPA piston')
+    p2.set_title('spot size')
+
+    p1.set_ylabel('row')
+    p1.set_xlabel('wavelength')
+    p2.set_xlabel('wavelength')
+
+    f.tight_layout()
+
+    return f
+
 def dispOffsets(df, title=None, yrange=None, focus=None, perSpot=True,
-                figsize=(10,10)):
+                figsize=(10,10), debug=False):
     """Diagnostic plots for dither repeats
 
     Parameters
@@ -621,10 +701,13 @@ def dispOffsets(df, title=None, yrange=None, focus=None, perSpot=True,
     for c_i in range(ncols):
         pl[-1,c_i].set_xlabel('dither offset (15um pix)')
 
-
+    if debug:
+        breakpoint()
+        
     for w_i, w in enumerate(sorted(df.wavelength.unique())[::-1]):
         for r_i, r in enumerate(sorted(df.row.unique())[::-1]):
             p = pl[r_i][w_i]
+            p.set_aspect('equal')
             frows = df.loc[(df.wavelength == w) & (df.row == r) & (df.focus == focus)]
             if len(frows) == 0:
                 continue
@@ -639,8 +722,8 @@ def dispOffsets(df, title=None, yrange=None, focus=None, perSpot=True,
                     miny = oneDither.ypix.values[0]
                 print(f'{w} {r} {vis}: {len(oneDither)} ({minx},{miny})')
                 p.plot(oneDither.xpix - minx, oneDither.ypix - miny, 'x', alpha=0.5)
-            p.hlines([0.0, 0.33, 0.66], -0.1, 1.2, alpha=0.3, color='k')
-            p.vlines([0.0, 0.33, 0.66], -0.1, 1.2, alpha=0.3, color='k')
+            p.hlines([0.0, 0.33, 0.66], -0.1, 1.0, alpha=0.3, color='k')
+            p.vlines([0.0, 0.33, 0.66], -0.1, 1.0, alpha=0.3, color='k')
             if perSpot:
                 p.set_ylim(-0.1, 1.1)
                 p.set_xlim(-0.1, 1.1)
