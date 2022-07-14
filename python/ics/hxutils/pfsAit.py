@@ -578,9 +578,36 @@ def dispFocusPlots(df, title=None, yrange=None):
     for w_i, w in enumerate(sorted(df.wavelength.unique())[::-1]):
         for r_i, r in enumerate(sorted(df.row.unique())[::-1]):
             frows = df.loc[(df.wavelength == w) & (df.row == r)]
-            hxdisplay.focusPlot(frows, pl[r_i][w_i], sizeOnly=True,
-                                dithers=True, yrange=yrange)
+            try:
+                hxdisplay.focusPlot(frows, pl[r_i][w_i], sizeOnly=True,
+                                    dithers=True, yrange=yrange)
+            except:
+                print(f'FAILED to plot {frows.wavelength.unique()},{frows.row.unique()}')
+    finalTitle=f'dithers {df.visit.min()}..{df.visit.max()}'
+    if title is not None:
+        finalTitle = f'{finalTitle} {title}'
+    f.suptitle(finalTitle)
+    f.tight_layout()
 
+    return f
+
+def dispFocusPlanes(df, title=None, yrange=None):
+
+    f, pl = plt.subplots(nrows=1, ncols=2, sharex=True, sharey=True,
+                         figsize=(10,6), squeeze=False)
+
+    for w_i, w in enumerate(sorted(df.wavelength.unique())[::-1]):
+        for r_i, r in enumerate(sorted(df.row.unique())[::-1]):
+            sweep = df.loc[(df.wavelength == w) & (df.row == r)]
+            sweep = sweep.sort_values(by=['focus'])
+
+            minx, poly = nirander.getBestFocus(sweep)
+
+            try:
+                hxdisplay.focusPlot(frows, pl[r_i][w_i], sizeOnly=True,
+                                    dithers=True, yrange=yrange)
+            except:
+                print(f'FAILED to plot {frows.wavelength.unique()},{frows.row.unique()}')
     finalTitle=f'dithers {df.visit.min()}..{df.visit.max()}'
     if title is not None:
         finalTitle = f'{finalTitle} {title}'
