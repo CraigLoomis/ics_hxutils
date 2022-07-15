@@ -475,6 +475,75 @@ class GimbalIlluminator(Illuminator):
         xPos, yPos = self.getSteps()
         self.moveToSteps(xPos+dx, yPos+dy)
 
+    def _waitForMoveEnd(self, axis, waitTime=0.1, maxTime=30):
+        waitUntil = time.time() + maxTime
+        while True:
+            check = self.dev.cmd(f"/{axis}Q", shush=True)
+            if '`' in check:
+                return
+            if time.time() >= waitUntil:
+                raise RuntimeError(f'timed out waiting for end of move on axis {axis}')
+            time.sleep(waitTime)
+
+    def sendMoveCmd(self, axis, cmdStr):
+        """Send a single low-level axis move command, with wait for end-of-motion."""
+        self.dev.cmd(cmdStr, debug=True)
+        self._waitForMoveEnd(axis)
+        
+    def _preload(self, axis, backlash, ditherWidth, startSteps):
+        """Using Aidan's prescription, apply one axis preload
+
+        Parameters
+        ----------
+        axis : `int`
+            the motor controller axis to command
+        backlash : `int`
+            the gross backlash adjustment
+        ditherSteps : int
+            the size of the individual windup steps
+        startSteps : `int`
+            the number of windup steps
+        """
+
+        self.sendMoveCmd(axis, f"/{axis}P{backlash}R")
+        self.sendMoveCmd(axis, f"/{axis}D{backlash*2}R")
+        self.sendMoveCmd(axis, f"/{axis}P{backlash - ditherWidth*startSteps}R")
+
+        for i in range(startSteps):
+            self.sendMoveCmd(axis, f"/{axis}P{ditherWidth}R")
+        
+    def preloadX(self, ditherWidth=46+2, startSteps=5, backlash=4000):
+        """Using Aidan's prescription, apply X preload
+
+        Parameters
+        ----------
+        ditherSteps : int
+            the size of the individual windup steps
+        startSteps : `int`
+            the number of windup steps
+        backlash : `int`
+            the gross backlash adjustment
+        """
+        # Backlash Takeup
+        self.logger.debug("X backlash takeup...")
+        self._preload(1, backlash=backlash, ditherWidth=ditherWidth, startSteps=startSteps)
+
+    def preloadY(self, ditherWidth=49-5, startSteps=5, backlash=4000):
+        """Using Aidan's prescription, apply Y preload
+
+        Parameters
+        ----------
+        ditherSteps : int
+            the size of the individual windup steps
+        startSteps : `int`
+            the number of windup steps
+        backlash : `int`
+            the gross backlash adjustment
+        """
+        # Backlash Takeup
+        self.logger.debug("X backlash takeup...")
+        self._preload(2, backlash=backlash, ditherWidth=ditherWidth, startSteps=startSteps)
+        
     def moveToSteps(self, x, y, preload=True, onlyIfNecessary=True):
         """Move the gimbelator to the given (x,y) steps. Apply preload and shortcircuit by default.
 
@@ -500,14 +569,16 @@ class GimbalIlluminator(Illuminator):
         if onlyIfNecessary and xPos == x and yPos == y:
             return xPos, yPos
 
-        # For the preload, if *either* motor is > requested pos, move both below target.
-        if preload and (x < xPos or y < yPos):
-            cmdStr = f"move {x-self.preloadDistance} {y-self.preloadDistance}"
-            self.dev.cmd(cmdStr, debug=True, maxTime=45)
-
         dist = max(abs(x-xPos), abs(y-yPos))
         cmdStr = f"move {x} {y}"
         self.dev.cmd(cmdStr, debug=True, maxTime=dist/1000)
+
+        # For the preload, if *either* motor is > requested pos, move both below target.
+        if preload and (y < yPos):
+            self.preloadY(y, startSteps=0)
+        # For the preload, if *either* motor is > requested pos, move both below target.
+        if preload and (x < xPos):
+            self.preloadX(x, startSteps=0)
 
         xNew, yNew = self.getSteps()
 
@@ -692,6 +763,63 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True,
     else:
         return callRet
 
+def ditherScan(meade, pos, nread=3, 
+               ditherWidth=3, xsteps=46+2, ysteps=49-5,
+               backlash=4000, startSteps=5,
+               windowHeight=100, row=None,
+               posInPixels=True):
+    """Move to the given positions and acquire a dither
+
+    Args
+    ----
+    pos : (x, y)
+      The *center* position of the dither.
+    nread : int
+      How many reads to take per ramp
+
+    """
+
+    callRet = []
+
+    if posInPixels:
+        xpix, ypix = pos
+        xpos, ypos = meade.pixToSteps(pos)
+    else:
+        xpos, ypos = pos
+        xpix, ypix = meade.stepsToPix(pos)
+
+    lastXStep, lastYStep = meade.getSteps()
+    xpos -= xsteps
+    ypos -= ysteps
+    meade.moveToSteps(xpos, ypos, preload=False)
+    if xpos < lastXStep or ypos < lastYStep:
+        meade.preloadY(backlash=backlash, ditherWidth=ysteps, startSteps=startSteps)
+        meade.preloadX(backlash=backlash, ditherWidth=xsteps, startSteps=startSteps)
+        
+    if windowHeight is not None:
+        _setRowWindow(meade, ypix, windowHeight)
+
+    for y_i in range(ditherWidth):
+        for x_i in range(ditherWidth):
+            ret = takeBareSpot(meade, nread=nread, row=row)
+            callRet.append(ret)
+
+            if x_i != ditherWidth - 1:
+                meade.sendMoveCmd(1, f'/1P{xsteps}R')
+        if y_i != ditherWidth - 1:
+            meade.sendMoveCmd(2, f"/2P{ysteps}R")
+            meade.sendMoveCmd(1, f"/1D{xsteps*(ditherWidth - 1) + backlash}R")
+            meade.sendMoveCmd(1, f"/1P{backlash - (xsteps * startSteps)}R")
+
+            for i in range(startSteps):
+                meade.sendMoveCmd(1, f"/1P{xsteps}R")
+                
+    if windowHeight is not None:
+        _clearRowWindow(meade)
+
+    return pd.concat(callRet, ignore_index=True)
+
+
 def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
     xrepeats = []
     yrepeats = []
@@ -762,8 +890,7 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, r1=-1):
 
     if 'xpix' not in frames or np.isnan(frames.xpix.values[ctrIdx]):
         pixFromStep = True
-        ctrPix = meade.stepsToPix((frames[['xstep','ystep']].values[ctrIdx]))
-        ctr = np.round(ctrPix).astype('i4')
+        ctr = np.round(frames[['xpix0','ypix0']].values[ctrIdx]).astype('i4')
     else:
         pixFromStep = False
         ctr = np.round(frames[['xpix','ypix']].values[ctrIdx]).astype('i4')
