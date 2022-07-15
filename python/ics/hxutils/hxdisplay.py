@@ -777,7 +777,45 @@ def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8,
 def dispDitherDetails(disp, butler, ditherSet):
     setupDisp(disp)
 
-def dispTransform(df, meade, scale=1.0, title=''):
+def ditherDiag1(df):
+    """Show the measured positions of all individual dither spots. """
+    names, xspans, yspans = nirander.ditherScales(df)
+    
+    f,pl = plt.subplots(ncols=2, clear=True)
+    p1, p2 = pl
+    p1.set_aspect('equal')
+    xr = []
+    yr = []
+    for x_i, x in enumerate(xspans): 
+        y = yspans[x_i]
+        x -= x[0,0]
+        y -= y[0,0]
+        xd = np.mean(x[:,-1] - x[:,0])
+        yd = np.mean(y[-1,:] - y[0,:])
+        xr.append(xd)
+        yr.append(yd)
+
+        p1.plot(x,y, '+', alpha=0.3, markersize=2)
+    p1.set_xlim(-0.25, 1.0)
+    p1.set_ylim(-0.25, 1.0)
+
+    p1.hlines([0,0.33,0.66], xmin=-0.25, xmax=1, alpha=0.5, color='k', linewidth=0.2)
+    p1.vlines([0,0.33,0.66], ymin=-0.25, ymax=1, alpha=0.5, color='k', linewidth=0.2)
+
+    xr = np.array(xr)
+    yr = np.array(yr)
+    p2.hist(xr, alpha=0.3, bins=20, range=(0.25, 1.0), label=f'x {np.nanmean(xr):0.2f} +/- {np.nanstd(xr):0.2f}')
+    p2.hist(yr, alpha=0.3, bins=20, range=(0.25, 1.0), label=f'y {np.nanmean(yr):0.2f} +/- {np.nanstd(yr):0.2f}')
+
+    p2.legend(fontsize='x-small')
+    print(np.nanmean(xr), np.nanstd(xr))
+    print(np.nanmean(yr), np.nanstd(yr))
+
+    f.suptitle(f'{len(names)} dithers, visit={df.visit.min()}..{df.visit.max()}')
+    f.tight_layout()
+    return f
+
+def dispTransform(df, meade=None, scale=1.0, title=''):
     # updateTargets(df, meade)
     try:
         plt.close('xform')
