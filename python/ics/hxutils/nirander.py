@@ -368,7 +368,9 @@ class GimbalIlluminator(Illuminator):
         # The keys are strings containing a pair: "(940, 2040)"
         # We do not eval here but encode when indexing.
         self.nudges = cfg['nudges'][self.cam]
+        self.pix0 = cfg['pix0'][self.cam]
         self.logger.info(f'nudges: {self.nudges}')
+        self.logger.info(f'pix0: {self.pix0}')
         if self.lampType == 'mono':
             self.lamps = self.mono
         else:
@@ -398,16 +400,18 @@ class GimbalIlluminator(Illuminator):
 
         return t, tinv
 
-    def updateTargets(self, df):
-        """Utility hack to retransform pix0 = transform(step), assuming trnsform has changed. """
+    def updateTargets(self, df, usePix0=True):
+        """Utility hack to retransform pix0 = transform(step), assuming trnsform or pix0 table has changed. """
         xtargets = []
         ytargets = []
         for i in range(len(df)):
             row = df.iloc[i]
             xstep, ystep = row[['xstep', 'ystep']]
-            target = self.stepsToPix((xstep, ystep))
-            xtargets.append(target[0])
-            ytargets.append(target[1])
+            xpix0, ypix0 = self.stepsToPix((xstep, ystep))
+            if usePix0:
+                xpix0, ypix0 = self.nudgePix0(xpix0, ypix0, row.wavelength, row.row)
+            xtargets.append(xpix0)
+            ytargets.append(ypix0)
 
         df['xpix0'] = xtargets
         df['ypix0'] = ytargets
@@ -534,6 +538,20 @@ class GimbalIlluminator(Illuminator):
 
         return pos
 
+    def nudgePix0(self, xpix0, ypix0, wavelength, row=None):
+        if row is None:
+            return xpix0, ypix0
+        
+        nudgeKey = str((int(wavelength), int(row)))
+        try:
+            pix0 = self.pix0[nudgeKey]
+            self.logger.info(f'pix0 for {nudgeKey}: {pix0}')
+            xpix0, ypix0 = pix0
+        except KeyError:
+            pass
+
+        return xpix0, ypix0
+            
     def home(self, doX=True, doY=True):
         """Home one or more axes. Both by default. The controller leaves it at "middle" of range. """
 
