@@ -74,7 +74,7 @@ class AidanPi(object):
     def __repr__(self):
         return self.__str__()
 
-    def cmd(self, cmdStr, debug=False, maxTime=5.0):
+    def cmd(self, cmdStr, debug=False, maxTime=5.0, shush=False):
         """ Send a single motor command.
 
         Args
@@ -93,7 +93,8 @@ class AidanPi(object):
         replyBuffer = ""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((self.host, self.port))
-            logFunc(f'send: {cmdStr.strip()}')
+            if not shush:
+                logFunc(f'send: {cmdStr.strip()}')
             sock.sendall(bytes(cmdStr, "latin-1"))
 
             t0 = time.time()
@@ -101,7 +102,8 @@ class AidanPi(object):
                 rcvd = str(sock.recv(1024), "latin-1")
                 rcvd = rcvd.strip()
                 replyBuffer += rcvd
-                logFunc(f'rcvd: {rcvd}, reply: {replyBuffer}')
+                if not shush:
+                    logFunc(f'rcvd: {rcvd}, reply: {replyBuffer}')
                 if replyBuffer.endswith('OK') or replyBuffer.endswith('BAD'):
                     break
                 t1 = time.time()
@@ -113,7 +115,7 @@ class AidanPi(object):
         if 'BAD' in replyBuffer:
             raise RuntimeError(f"received unknown crap: {replyBuffer}")
         if not replyBuffer.endswith('OK'):
-            raise RuntimeError(f"received unknown crud: {replyBuffer}")
+            raise RuntimeError(f"received unfinished crud: {replyBuffer}")
 
         parts = replyBuffer.split(';')
         return parts[0]
