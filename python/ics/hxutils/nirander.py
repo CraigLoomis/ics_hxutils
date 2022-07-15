@@ -973,9 +973,9 @@ def _loopByWaves(meade, butler, waves, rows, focus,
                 moveFocus(meade.cam, f)
                 try:
                     if doDither:
-                        meas = ditherAtPix(meade, pos=pos, nread=nread)
+                        meas = ditherScan(meade, pos=pos, nread=nread, row=row)
                     else:
-                        meas = takeBareSpot(meade, nread=nread,
+                        meas = takeBareSpot(meade, nread=nread, row=row,
                                             comment=f'spotSet_{w}_{round(row)}_{round(f)}')
                 except Exception as e:
                     raise
@@ -1010,10 +1010,10 @@ def _loopByFocus(meade, butler, focus, rows, waves,
                 print(f"led {w} on row {int(row)} with focus {f}")
                 try:
                     if doDither:
-                        meas = ditherAtPix(meade, pos=pos, nread=nread)
+                        meas = ditherScan(meade, pos=pos, nread=nread, row=row)
                     else:
                         meade.moveToPix(*pos, preload=True, onlyIfNecessary=True)
-                        meas = takeBareSpot(meade, nread=nread,
+                        meas = takeBareSpot(meade, nread=nread, row=row,
                                             comment=f'spotSet_{w}_{round(row)}_{round(f)}')
                 except Exception as e:
                     raise
@@ -1048,10 +1048,10 @@ def _loopOverPos(meade, butler, focus, posList,
             print(f"led {w} on row {int(row)} with focus {f}")
             try:
                 if doDither:
-                    meas = ditherAtPix(meade, pos=pos, nread=nread)
+                    meas = ditherScan(meade, pos=pos, nread=nread, row=row)
                 else:
                     meade.moveToPix(*pos, preload=True, onlyIfNecessary=True)
-                    meas = takeBareSpot(meade, nread=nread,
+                    meas = takeBareSpot(meade, nread=nread, row=row,
                                         comment=f'spotSet_{w}_{round(row)}_{round(f)}')
             except Exception as e:
                 raise
@@ -1372,7 +1372,7 @@ def focusSweep(meade, butler, wave, row,
 
     return scanFrame
 
-def basicDataFrame(meade, visits, focus=None):
+def basicDataFrame(meade, visits, focus=None, row=None):
     """Create the core dataframe for some visits. Queries the controller for step/led info"""
 
     if np.isscalar(visits):
@@ -1380,10 +1380,13 @@ def basicDataFrame(meade, visits, focus=None):
     scanFrame = pd.DataFrame(dict(visit=visits))
     if focus is not None:
         scanFrame['focus'] = focus
-
+    if row is not None:
+        scanFrame['row'] = row
+        
     wavelength, dutyCycle, _ = meade.ledState()
     xstep, ystep = meade.getSteps()
     xpix0, ypix0 = meade.stepsToPix((xstep, ystep))
+    xpix0, ypix0 = meade.nudgePix0(xpix0, ypix0, wavelength, row=row)
     scanFrame['wavelength'] = wavelength
     scanFrame['xstep'] = xstep
     scanFrame['ystep'] = ystep
@@ -1513,11 +1516,11 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
 
     return scans
 
-def takeBareSpot(meade, nread=3, comment="no_comment"):
+def takeBareSpot(meade, nread=3, row=None, comment="no_comment"):
     """Lowest-level exposure which returns a dataframe with (visit, xstep, ystep, led) """
 
     visit = takeRamp(cam=meade.cam, nread=nread, exptype='object', comment=comment)
-    df = basicDataFrame(meade, visits=[visit])
+    df = basicDataFrame(meade, visits=[visit], row=row)
 
     return df
 
