@@ -48,6 +48,7 @@ def filter_61722(df, startVisit=0):
 
     # Renames for clarity
     dfOut.loc[dfOut.testName == 'leakTest', 'testName'] = 'lightLeakTest'
+    dfOut.loc[dfOut.testName == 'plate_5C_2', 'testName'] = 'plate_+0K'
 
     return dfOut
 
