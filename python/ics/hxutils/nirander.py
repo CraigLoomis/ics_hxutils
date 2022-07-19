@@ -726,19 +726,19 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True,
 
     callRet = []
     lastXStep = lastYStep = 99999
-    for x_i, x in enumerate(xpos):
-        for y_i, y in enumerate(ypos):
+    for y_i, y in enumerate(ypos):
+        if windowRow is not None:
+            _setRowWindow(meade, windowRow, windowHeight)
+        elif windowHeight is not None:
+            if not posInPixels:
+                raise RuntimeError("need pos in pixels to window")
+            _setRowWindow(meade, y, windowHeight)
+
+        for x_i, x in enumerate(xpos):
             if posInPixels:
                 xStep, yStep = meade.pixToSteps([x, y])
             else:
                 xStep, yStep = x, y
-
-            if windowRow is not None:
-                _setRowWindow(meade, windowRow, windowHeight)
-            elif windowHeight is not None:
-                if not posInPixels:
-                    raise RuntimeError("need pos in pixels to window")
-                _setRowWindow(meade, y, windowWidth)
 
             # We want to always move in the same direction: from low.
             preload = (xStep < lastXStep or yStep < lastYStep)
@@ -755,7 +755,7 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True,
     if led is not None:
         meade.lampsOff()
 
-    if windowRow is not None:
+    if windowHeight is not None:
         _clearRowWindow(meade)
 
     if call is None:
