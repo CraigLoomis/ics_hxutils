@@ -324,8 +324,6 @@ class GimbalIlluminator(Illuminator):
             ip = 'gimbalpi'
         self.dev =  AidanPi('gimbal', ip, logLevel=logLevel)
 
-        self.preloadDistance = 50
-
         if forceLedOff:
             self.lampsOff()
 
