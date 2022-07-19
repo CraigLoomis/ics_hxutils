@@ -545,7 +545,10 @@ def dispStackedVisits(disp, visits, cam, doClear=True, medSubtract=True,
 def getPix(row, meade, targetPos=False):
     """For a reading get the center pixel. Use measurement is available, else the steps. """
 
-    xpix, ypix = meade.stepsToPix([row['xstep'], row['ystep']])
+    try:
+        xpix, ypix = row['xpix0'], row['ypix0']
+    except:
+        xpix, ypix = meade.stepsToPix([row['xstep'], row['ystep']])
     if targetPos:
         return xpix, ypix
 
