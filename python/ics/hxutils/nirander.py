@@ -1508,8 +1508,8 @@ def getPolyMin(sweep, xname, yname):
         minx = -b/(2*a)
     return minx, poly
 
-def getBestFocus(sweep):
-    return getPolyMin(sweep, 'focus', 'size')
+def getBestFocus(sweep, focusCol='size'):
+    return getPolyMin(sweep, 'focus', focusCol)
 
 def getFocusGrid(center, spacing=2, r=5):
     focusReq = center + (np.arange(2*r-1) - (r-1))*spacing
