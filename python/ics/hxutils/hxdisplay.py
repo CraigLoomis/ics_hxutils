@@ -830,9 +830,22 @@ def dispTransform(df, meade=None, scale=1.0, title=''):
         pass
     f, pl = plt.subplots(num='xform', clear=True)
 
-    q = pl.quiver(df.xpix0, df.ypix0, df.xpix-df.xpix0, df.ypix-df.ypix0,
+    if meade is not None:
+        xpix0 = np.empty(shape=len(df))
+        ypix0 = np.empty(shape=len(df))
+        for row_i, row in df.reset_index().iterrows():
+            xpix, ypix = meade.stepsToPix([row.xstep, row.ystep])
+            xpix0[row_i] = xpix
+            ypix0[row_i] = ypix
+    else:
+        xpix0 = df.xpix0
+        ypix0 = df.ypix0
+        
+    q = pl.quiver(xpix0, ypix0, df.xpix-xpix0, df.ypix-ypix0,
                   width=0.003) # , scale_units='xy', scale=10)
-    pl.quiverkey(q, X=0.9, Y=1.05, U=scale, label=f'{scale:0.0f} pix resid', labelpos='E', alpha=0.6)
+    pl.set_ylim(-500,4600)
+    pl.set_xlim(-500,4600)
+    pl.quiverkey(q, X=0.1, Y=1.05, U=scale, label=f'{scale:0.0f} pix resid', labelpos='E', alpha=0.6)
     f.suptitle(f'Gimbalator step->pix visit={df.visit.min()} {title}')
 
     return f
