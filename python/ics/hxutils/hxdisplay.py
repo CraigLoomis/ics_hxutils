@@ -67,7 +67,7 @@ def regStats(fpath, slices=None, r0=0, r1=-1, fitr0=1, fitr1=-1, doDiffs=False,
         ddevs.append(np.std(dim))
     dmeds = np.array(dmeds)
     ddevs = np.array(ddevs)
-    yoffset = meds[fitr0]
+    yoffset = dmeds[fitr0]
 
     plotX = plotReads * readTime
     fitY = np.array(dmeds[fitr0:fitr1])
