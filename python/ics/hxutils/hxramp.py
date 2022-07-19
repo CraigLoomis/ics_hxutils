@@ -51,6 +51,22 @@ class HxRamp(object):
             self.fits = None
         return True
 
+    def calcDetectorGain(self):
+        self.preampGain = self.phdu['W_H4GAIN']
+
+        # n3 (18315) gain is transferred from 18660 by scaling the measured 18660 gain by the 
+        # ratio of the Teledyne uV/e- detectors gains
+        gains = dict(n3=1.914)
+        
+        self.e_per_ADU = gains[self.cam]
+        self.e_per_ADU *= self.preampGain / 4.0
+
+    def aduToE(self, data, rate=False):
+        data = data * self.e_per_ADU
+        if rate:
+            data /= self.rampTime
+        return data
+    
     def calcBasics(self):
         """Figure out some basic properties of the ramp, using the first read or header.
 
@@ -68,8 +84,8 @@ class HxRamp(object):
         _, num = lastName.split('_')
         num = int(num)
         self.nreads = num
-        self.preampGain = self.phdu['W_H4GAIN']
-
+        self.calcDetectorGain()
+        
         read0 = self.dataN(0)
         self.width = read0.shape[1]
         self.frameTime = self.phdu['W_H4FRMT']
