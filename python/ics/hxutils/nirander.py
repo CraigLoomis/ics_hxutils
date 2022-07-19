@@ -348,13 +348,13 @@ class GimbalIlluminator(Illuminator):
 
         transformClass = self._resolveTransform(cfg['geometry']['transformClass'])
         coeffs = cfg['geometry']['transformCoeffs']
-        if isinstance(coeffs, (list, tuple)):
+        if transformClass == skimage.transform.PolynomialTransform:
             assert len(coeffs) == 2, "lists of coeffs must be len=2"
 
             self._stepToPix = transformClass(np.array(coeffs[0]))
             self._pixToStep = transformClass(np.array(coeffs[1]))
         else:
-            self._stepToPix = transformClass(np.array(coeffs))
+            self._stepToPix = transformClass(np.array(coeffs[0]))
             self._pixToStep = self._stepToPix.inverse
 
         self._leds = pd.DataFrame(cfg['leds'])
