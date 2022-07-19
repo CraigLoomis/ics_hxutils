@@ -1051,9 +1051,53 @@ def writeDither(row, butler, dithIm):
 
     return idDict
 
-def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False, meade=None, r1=-1):
+def ditherScales(frames, debug=False):
+    """Get just the 3x3 dither measured positions. """
+    gnames = []
+    xspans = []
+    yspans = []
+    if debug:
+        import pdb; pdb.set_trace()
+
+    frames = frames.sort_values(['row', 'wavelength', 'focus','ystep','xstep'], ascending=[False, False, True,True,True])
+    for gname, dither in frames.groupby(['row', 'wavelength', 'focus']):
+        gnames.append(gname)
+        xp = dither.xpix.to_numpy().reshape((3,3))
+        yp = dither.ypix.to_numpy().reshape((3,3))
+        # print(gname, len(dither), xp)
+        xspans.append(xp)
+        yspans.append(yp)
+    # return pd.DataFrame(ids)
+
+    return gnames, xspans, yspans
+
+def bestDitherSpot(frames, debug=False):
+    """For each image in a dither, return the most centered one."""
+    bests = []
+    ditherVisits = []
+    if debug:
+        import pdb; pdb.set_trace()
+
+    frames = frames.sort_values(['wavelength', 'row', 'focus','ystep','xstep'], ascending=[False, True, True,True,True])
+    for gname, dither in frames.groupby(['wavelength', 'row', 'focus']):
+        pk = dither.peak / dither.flux
+        d1 = dither.loc[pk.sort_values().tail(1).index]
+        ditherVisits.append(dither.visit.min())
+        bests.append(d1)
+        
+    df = pd.concat(bests)
+    df['ditherVisit'] = ditherVisits
+    df = df.sort_values(['wavelength', 'row', 'focus'], ascending=[False, True, True])
+
+    return df
+
+def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False, meade=None, r1=-1,  
+               doMeasure=True, debug=False):
     dithers = []
     ids = []
+    if debug:
+        import pdb; pdb.set_trace()
+
     for i in range(len(frames)//9):
         dithFrames = frames.iloc[i*9:(i+1)*9]
         print(len(dithFrames))
@@ -1071,43 +1115,8 @@ def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False, meade=None, r
             idDict = writeDither(row, butler, dith1)
             ids.append(idDict)
 
-    return pd.DataFrame(ids)
-
-def ditherAt(meade, led, row, nramps=3, npos=3, nread=3, xsteps=5, ysteps=2):
-    """Acquire dithered imaged at a given position. """
-
-    if npos%2 != 1:
-        raise ValueError("not willing to deal with non-odd dithering")
-    rad = npos//2
-    xc, yc = meade.pixToSteps([meade.lamps.position[led], row])
-    x0, y0 = xc-(rad*xsteps), yc-(rad*ysteps)
-
-    xx = x0 + np.arange(npos)*xsteps
-    yy = y0 + np.arange(npos)*ysteps
-
-    visits = []
-    for r_i in range(nramps):
-        gridVisits = motorScan(meade, xx, yy, led=led, nread=nread,
-                               posInPixels=False)
-        visits.extend(gridVisits)
-
-    return pd.concat(visits, ignore_index=True)
-
-def ditherAtPix(meade, pos, npos=3, nread=3, xsteps=5, ysteps=2):
-    """Acquire set of dithered starting from the given pixel position. """
-
-    if npos%2 != 1:
-        raise ValueError("not willing to deal with non-odd dithering")
-    rad = npos//2
-    xc, yc = meade.pixToSteps(pos)
-    x0, y0 = xc-(rad*xsteps), yc-(rad*ysteps)
-
-    xx = x0 + np.arange(npos)*xsteps
-    yy = y0 + np.arange(npos)*ysteps
-
-    ditherVisits = motorScan(meade, xx, yy, nread=nread, posInPixels=False)
-
-    return ditherVisits
+    df = pd.DataFrame(ids)        
+    return df
 
 def _setRowWindow(meade, row, windowWidth=50):
     """Configure H4 row skipping to straddle a row
