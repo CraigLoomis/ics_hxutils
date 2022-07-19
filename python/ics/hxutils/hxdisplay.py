@@ -5,6 +5,7 @@ import pathlib
 
 import fitsio
 import numpy as np
+import scipy
 import matplotlib.pyplot as plt
 
 import sep
@@ -370,7 +371,8 @@ def focusOffsetPlot(meade, focusResults, visit=None):
     f.suptitle(f'best focus, from visit={visit}')
     return f
 
-def dispVisits(disp, visits, r0=0, r1=-1, cam='n1', doClear=True):
+def dispVisits(disp, visits, r0=0, r1=-1, cam='n1', 
+               doClear=True, medFilter=None):
     if doClear:
         disp.set('frame delete all')
     disp.set('frame lock image')
@@ -382,6 +384,8 @@ def dispVisits(disp, visits, r0=0, r1=-1, cam='n1', doClear=True):
     for v in visits:
         path = pathUtils.rampPath(v, cam=cam)
         cds = hxramp.HxRamp(path).cdsN(r0=r0, r1=r1)
+        if medFilter is not None and medFilter > 0:
+            cds = scipy.ndimage.median_filter(cds, medFilter)
         disp.set('frame new')
         disp.set_np2arr(cds)
 
