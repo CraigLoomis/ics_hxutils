@@ -768,8 +768,12 @@ def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8,
         print(name, path)
 
         im, hdr = fitsio.read(path, header=True)
-        ctr = int(round(hdr['XPIX'])), int(round(hdr['YPIX']))
-        rad = im.shape[0]//(3*2)
+        try:
+            ctr = int(round(hdr['XPIX'])), int(round(hdr['YPIX']))
+            rad = im.shape[0]//(3*2)
+        except KeyError:
+            ctr = im.shape[1]//2, im.shape[0]//2
+            rad = min(im.shape[0], im.shape[1])//2
         xslice = slice(ctr[0]-rad, ctr[0]+rad)
         yslice = slice(ctr[1]-rad, ctr[1]+rad)
 
