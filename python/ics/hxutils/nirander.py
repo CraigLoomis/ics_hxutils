@@ -599,11 +599,11 @@ class GimbalIlluminator(Illuminator):
         led = self.lamps[self.lamps.wave == wave]
         col = int(led.position)
         nudgeKey = str((int(wave), int(row)))
-        pos = (col, row)
+        pos = np.array([col, row])
         try:
-            nudge = self.nudges[nudgeKey]
-            self.logger.info(f'nudge for {nudgeKey}: {pos} to {nudge}')
-            pos = nudge
+            nudge = np.array(self.nudges[nudgeKey])
+            self.logger.info(f'nudge for {nudgeKey}: {pos} by {nudge}')
+            pos += nudge
         except KeyError:
             pass
 
