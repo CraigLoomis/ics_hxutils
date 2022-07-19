@@ -777,8 +777,39 @@ def ditherScan(meade, pos, nread=3,
     nread : int
       How many reads to take per ramp
 
+row  steps/5um um/step
+ 200 44.24 0.1130
+ 816 44.84 0.1115
+1433 45.36 0.1102
+2050 45.83 0.1091
+2666 46.25 0.1081
+3283 46.62 0.1073
+3900 46.92 0.1066
+
+col  steps/5um um/step
+ 940 48.14 0.1039
+1020 48.37 0.1034
+1100 48.43 0.1032
+1180 48.34 0.1034
+1260 48.12 0.1039
     """
 
+    # Post-78730 fiddles, from the aggregate of the dithers
+    #
+    # y-dither is ~10% too small
+    # x-dither is correct at middle row, but
+    # needs to be scaled per above table.
+
+    ysteps = round(ysteps * 1.1)
+
+    xy = np.array([[200, 44.24], [816, 44.84], [1433, 45.36],
+                   [2050, 45.83],[2666, 46.25],[3283, 46.62],[3900, 46.92]])
+    steps = xy[:,1]
+    stepScales = steps / steps[3]
+    scalesTable = dict(zip(xy[:,0].astype('int'), stepScales))
+
+    xsteps = round(xsteps * scalesTable[int(row)])
+    
     callRet = []
 
     if posInPixels:
