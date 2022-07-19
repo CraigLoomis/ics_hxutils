@@ -473,18 +473,20 @@ def dispPlane(df, name, req=None, plotRange=None, pl=None,
     pl.set_ylabel('row')
     pl.set_title(f'{name}, {label}={df[name].mean():0.3f}')
 
-    cb = plt.colorbar(o, ax=pl, fraction=0.1, pad=0.01, format='%0.3f')
+    # import pdb; pdb.set_trace()
+    cb = plt.colorbar(o, ax=pl, fraction=0.1, pad=0.01, 
+                      spacing='proportional', format='%0.3f')
     cb.ax.axhline(y=req, c='k')
 
     original_ticks = list(cb.get_ticks())
-    cb.set_ticks(original_ticks + [req])
-    # cb.set_ticklabels(original_ticks + [f'{req:0.3f}'])
-
-    #pl.set_xbound(df.wavelength.min(), df.wavelength.max())
+    ticks = sorted(original_ticks + [req, plotRange[0], plotRange[1]])
+    labels = [f'{t:0.3f}' for t in ticks]
+    print(ticks, labels)
+    cb.set_ticks(mpl.ticker.FixedLocator(ticks)) #, labels=labels)
 
     return f
 
-def dispSizes(df, atFocus=None, focusRange=None, title=None):
+def dispSizes(df, atFocus=None, focusRange=None, title=None, debug=False):
     f, pl = plt.subplots(nrows=2, ncols=2, num='sizes',
                          clear=True, figsize=(10,10),
                          sharex=True, sharey=True, squeeze=False)
@@ -519,6 +521,9 @@ def dispSizes(df, atFocus=None, focusRange=None, title=None):
     else:
         label = "mean"
 
+    if debug:
+        import pdb; pdb.set_trace()
+        
     for p_i, (name, requirement, plotRange) in enumerate(plots):
         dispPlane(spotees, name, req=requirement, plotRange=plotRange,
                   pl=pl[p_i], label=label)
