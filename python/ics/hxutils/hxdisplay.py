@@ -748,8 +748,8 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8,
     return waveGroups
 
 def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8,
-                       scaleType='asinh', scaleLimits=None,
-                       badMask=None, pfsDay='*'):
+                       scaleType='asinh', extraScale=None, scaleLimits=None,
+                       badMask=None, pfsDay='*', noteAt=None):
     """Generate a single-focus dither display"""
 
     focusDither = ditherSet[ditherSet.focus == focus].copy()
@@ -781,6 +781,9 @@ def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8,
         if badMask is not None:
             imask = badMask[yslice, xslice]
             setMask(disp, imask)
+
+        if extraScale is not None:
+            im *= extraScale
         disp.set_np2arr(im)
 
     return waveGroups
