@@ -1136,6 +1136,23 @@ def allDithers(frames, hxCalib, rad=15, scale=3,
     df = pd.DataFrame(ids)        
     return df
 
+def _calcRowWindow(row, windowWidth):
+    if row <= 4 or row >= 4092:
+        raise ValueError(f'row window too close to edge: {row}')
+    if 2*windowWidth > 4096-8:
+        raise ValueError(f'window width too big: {windowWidth}')
+        
+    windowStart = int(row) - windowWidth
+    if windowStart < 4:
+        windowStart = 4
+    elif windowStart + 2*windowWidth > 4092:
+        windowStart = 4092 - 2*windowWidth
+    skipToWindow = windowStart - 4
+        
+    skipToTopRef = 4092 - (windowStart + 2*windowWidth)
+    
+    return skipToWindow, skipToTopRef
+    
 def _setRowWindow(meade, row, windowWidth=50):
     """Configure H4 row skipping to straddle a row
 
@@ -1148,11 +1165,8 @@ def _setRowWindow(meade, row, windowWidth=50):
     windowWidth : `int`
         The radius of the window to read
     """
-    if row <= windowWidth-4 or row >= (4092-windowWidth):
-        raise ValueError(f'row window too close to edge: {row}')
 
-    skipToWindow = int(row) - windowWidth - 4
-    skipToTopRef = 4092 - (int(row) + windowWidth)
+    skipToWindow, skipToTopRef = _calcRowWindow(row, windowWidth)
     pfsutils.oneCmd(f'hx_{meade.cam}',
                     f'setRowSkipping skipSequence=4,{skipToWindow},{2*windowWidth},'
                     f'{skipToTopRef},{2*windowWidth + 8}')
