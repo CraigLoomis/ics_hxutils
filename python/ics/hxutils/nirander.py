@@ -1612,6 +1612,64 @@ def basicDataFrame(meade, visits, focus=None, row=None):
 
     return scanFrame
 
+
+def rbSpot(spot):
+    """Barkhouser's spot size prescription. """
+    totalFlux = 0.0
+    xMean = 0.0
+    yMean = 0.0
+    xM2 = 0
+    yM2 = 0
+    h, w = spot.shape
+
+    for x in range(w):
+        for y in range(h):
+            pxlFlux = spot[y,x]
+            if pxlFlux < 0:
+                pxlFlux = 1e-3
+            
+            temp = pxlFlux + totalFlux
+            if temp == 0:
+                temp = 1.0
+            deltaX = (x + 1) - xMean
+            deltaY = (y + 1) - yMean
+
+            Rx = deltaX * pxlFlux / temp
+            Ry = deltaY * pxlFlux / temp
+            xMean += Rx
+            yMean += Ry
+            xM2 += totalFlux * deltaX * Rx
+            yM2 += totalFlux * deltaY * Ry
+            totalFlux = temp
+            # print(f'{s},{t}: {pxlFlux:0.2f} {totalFlux:0.2f} ({xMean:0.2f},{yMean:0.2f}) ({deltaX:0.2f},{deltaY:0.2f}) ({xM2:0.2f},{yM2:0.2f})')
+    xVar = xM2 / totalFlux
+    yVar = yM2 / totalFlux
+    xSigma = np.sqrt(xVar)
+    ySigma = np.sqrt(yVar)
+    rms = np.sqrt((xSigma * xSigma) + (ySigma * ySigma))
+    print(f'    {rms:0.2f}, {totalFlux:0.2f}  ({xVar:0.2f},{yVar:0.2f}) ({xSigma:0.2f},{ySigma:0.2f}) ({xM2:0.2f},{yM2:0.2f})')
+
+    return rms, xMean-1, yMean-1
+
+def remeasure(spot, center, radius=10, mask=None, 
+              doTrim=False):
+    
+    ctrX, ctrY = [int(c) for c in center]
+    if doTrim:
+        spot = spot[ctrY-radius:ctrY+radius+1,
+                    ctrX-radius:ctrX+radius+1]
+        
+    mask = np.ones_like(spot, dtype=bool)
+    borderRad = radius - 2
+    mask[ctrY-borderRad:ctrY+borderRad+1, 
+         ctrX-borderRad:ctrX+borderRad+1] = 0
+    spot -= np.median(spot[mask])
+    rms, mnx, mny = rbSpot(spot)
+    if doTrim:
+        mnx += ctrX - radius
+        mny += ctrY - radius
+    return rms, mnx, mny
+   
 def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
                radius=10, searchRadius=5, skipDone=True, ims=None, trimBad=True, doClear=False,
                convolveSigma=None, kernel=True, remask=False,
@@ -1676,22 +1734,22 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
             center_i = center
 
         if ims is not None:
-            corrImg = ims[i_i]
+            corrImg1 = ims[i_i]
             if center is None:
                 center_i = None
         else:
             if hxCalib is not None:
-                corrImg = hxCalib.isr(scans.loc[scan_i, 'visit'], r0=r0, r1=r1)
+                corrImg1 = hxCalib.isr(scans.loc[scan_i, 'visit'], r0=r0, r1=r1)
 #                if remask:
 #                    path = hxramp.rampPath(visit=scans.loc[scan_i, 'visit'])
 #                    data0 = hxRamp.HxRamp(path).dataN(0)
 
             else:
                 ramp = hxramp.HxRamp(visit=scans.loc[scan_i, 'visit'])
-                corrImg = ramp.cdsN(r0=r0, r1=r1)
+                corrImg1 = ramp.cdsN(r0=r0, r1=r1)
 
         try:
-            corrImg, spots = getPeaks(corrImg,
+            corrImg, spots = getPeaks(corrImg1,
                                       center=center_i, radius=radius,
                                       searchRadius=searchRadius,
                                       thresh=thresh,
@@ -1730,6 +1788,15 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
             scans.loc[scan_i, 'ymin'] = bestSpot.ymin
             scans.loc[scan_i, 'ymax'] = bestSpot.ymax
 
+            rms, mnx, mny = remeasure(corrImg1,
+                                      center=center_i, radius=radius,
+                                      mask=hxCalib.badMask, 
+                                      doTrim=True)
+            scans.loc[scan_i, 'rms2'] = rms
+            scans.loc[scan_i, 'xpix2'] = mnx
+            scans.loc[scan_i, 'ypix2'] = mny
+            print(f'    {scans.loc[scan_i, "size"]:0.2f} @ ({bestSpot.x:0.2f},{bestSpot.y:0.2f}) vs. {rms:0.2f} @ ({mnx:0.2f},{mny:0.2f})')
+            
     return scans
 
 def takeBareSpot(meade, nread=3, row=None, comment="no_comment"):
