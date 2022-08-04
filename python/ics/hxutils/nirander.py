@@ -895,7 +895,8 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
 
     return xreps, yreps
 
-def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, r1=-1):
+def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, 
+                 scale=3, r1=-1, writeSpots=False, butler=None):
     """Create a dithered spot from 9 individual raw spots.
 
     Parameters
@@ -910,8 +911,12 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, r1=-1):
         Normalize flux to the 1st spot, by default False
     meade : `GimbalIlluminator`
         If the spot center is not known, what to ask for a good guess.
+    scale : `int`
+        The number of pixlet positions on each axis. 
     r1 : int, optional
         The H4 read to use, by default -1
+    writeSpots : `bool`
+        If True, write the individual spot file.
 
     Returns
     -------
@@ -922,8 +927,6 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, r1=-1):
     outIms : list of images
         The dither component images.
     """
-    scale = 3
-
     frames = frames.sort_values('visit', ascending=True)
     ctrIdx = (scale*scale)//2
     xsteps = frames['xstep'].unique()
@@ -933,7 +936,7 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, r1=-1):
     yoffsets = {ys:(scale-1)-yi for yi,ys in enumerate(ysteps)}
     # Need better sanity checks
     if len(frames) != scale*scale or len(xsteps) != scale or len(ysteps) != scale:
-        raise ValueError("only want to deal with 3x3 dithers")
+        raise ValueError(f"only want to deal with {scale}x{scale} dithers")
 
     if 'xpix' not in frames or np.isnan(frames.xpix.values[ctrIdx]):
         pixFromStep = True
@@ -947,12 +950,11 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, r1=-1):
 
     outIm = np.zeros((rad*2*scale, rad*2*scale), dtype='f4')
     bkgndMask = np.ones((rad*2, rad*2), dtype='f4')
-    bkgndMask[2:-2, 2:-1] = 0
+    bkgndMask[2:-2, 2:-2] = 0
     maskIm = hxCalib.badMask[yslice,xslice]
     bkgndMask *= 1-(maskIm>0)
     print(f"{bkgndMask.sum()}/{bkgndMask.size}")
     inIms = []
-    outIms = []
     for f_i, fIdx in enumerate(frames.index):
         f1 = frames.loc[fIdx]
         im = hxCalib.isr(int(f1.visit), r1=r1)
@@ -1072,7 +1074,7 @@ def writeRowImage(path, row, image):
     fitsio.write(path, image, header=hdr, clobber=True)
     logger.info(f'wrote {path}')
 
-def ditherScales(frames, debug=False):
+def ditherScales(frames, debug=False, nsteps=3):
     """Get just the 3x3 dither measured positions. """
     gnames = []
     xspans = []
@@ -1083,8 +1085,8 @@ def ditherScales(frames, debug=False):
     frames = frames.sort_values(['row', 'wavelength', 'focus','ystep','xstep'], ascending=[False, False, True,True,True])
     for gname, dither in frames.groupby(['row', 'wavelength', 'focus']):
         gnames.append(gname)
-        xp = dither.xpix.to_numpy().reshape((3,3))
-        yp = dither.ypix.to_numpy().reshape((3,3))
+        xp = dither.xpix.to_numpy().reshape((nsteps, nsteps))
+        yp = dither.ypix.to_numpy().reshape((nsteps, nsteps))
         # print(gname, len(dither), xp)
         xspans.append(xp)
         yspans.append(yp)
