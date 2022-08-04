@@ -253,8 +253,8 @@ def measureDithers(butler, rows, thresh=50,
 
         measX = meas.xpix.values[0]
         measY = meas.ypix.values[0]
-        dx = ditherCtr[0] - measX
-        dy = ditherCtr[1] - measY
+        dx = ctrX - measX
+        dy = ctrY - measY
 
         if abs(dx) >= 1:
             pixDist = int(abs(dx))
