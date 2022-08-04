@@ -301,7 +301,14 @@ def measureDithers(butler, rows, thresh=50,
             peaks['ee3'] = ee3 / peaks.flux.values[0]
             peaks['ee5'] = ee5 / peaks.flux.values[0]
 
-            nirander.writeDither(peaks, butler, centeredDither)
+            ditherCoreImg = centeredDither[ctrY-radius:ctrY+radius+1,
+                                           ctrX-radius:ctrX+radius+1]
+            rms, mnx, mny = nirander.remeasure(ditherCoreImg, 
+                                               center=[ctrX, ctrY],)
+            peaks['rms2'] = rms * ditherPixelSize
+            logger.info(f'{peaks["size"]} vs {peaks["rms2"]}, ({mnx}, {mny})')
+            
+            nirander.writeRowImage(peaks, butler, centeredDither)
 
         centeredDithers.append(centeredDither)
         centeredPeaks.append(peaks)
