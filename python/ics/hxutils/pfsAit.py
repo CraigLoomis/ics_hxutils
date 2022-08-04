@@ -446,7 +446,7 @@ def dispFocusPlane(df, focusCenter=None, focusRange=None, pl=None, cmapName='RdB
     return f
 
 def dispPlane(df, name, req=None, plotRange=None, pl=None,
-              markersize=300, cmapName='seismic', label='mean'):
+              markersize=300, cmapName='coolwarm', label='mean'):
     if pl is None:
         f, pl = plt.subplots(figsize=(10,8))
     else:
