@@ -768,7 +768,8 @@ def motorScan(meade, xpos, ypos, led=None, call=None, nread=3, posInPixels=True,
         return callRet
 
 def ditherScan(meade, pos, nread=3, 
-               ditherWidth=3, xsteps=46+2, ysteps=49-5,
+               ditherCount=3, ditherFactor=1, 
+               xsteps=46+2, ysteps=49-5,
                backlash=4000, startSteps=5,
                windowHeight=100, row=None,
                posInPixels=True):
@@ -803,17 +804,28 @@ col  steps/5um um/step
     # y-dither is ~10% too small
     # x-dither is correct at middle row, but
     # needs to be scaled per above table.
+    #
+    # Double yuck:
+    # For the new rows, just use the nearest old rows x-scale calibration
 
     ysteps = round(ysteps * 1.1)
 
-    xy = np.array([[200, 44.24], [816, 44.84], [1433, 45.36],
-                   [2050, 45.83],[2666, 46.25],[3283, 46.62],[3900, 46.92]])
+    xy1 = np.array([[200, 44.24], [816, 44.84], [1433, 45.36],
+                    [2050, 45.83],[2666, 46.25],[3283, 46.62],[3900, 46.92]])
+    xy2 = np.array([[45, 44.24], [648, 44.84], [1048, 45.36],
+                    [2048, 45.83],[3047, 46.25],[3448, 46.62],[4050, 46.92]])
+    xy = np.vstack([xy1, xy2])
+    
     steps = xy[:,1]
     stepScales = steps / steps[3]
     scalesTable = dict(zip(xy[:,0].astype('int'), stepScales))
 
     xsteps = round(xsteps * scalesTable[int(row)])
-    
+
+    if ditherFactor != 1:
+        xsteps = int(np.round(xsteps / ditherFactor))
+        ysteps = int(np.round(ysteps / ditherFactor)) 
+        ditherCount *= ditherFactor
     callRet = []
 
     if posInPixels:
@@ -824,8 +836,8 @@ col  steps/5um um/step
         xpix, ypix = meade.stepsToPix(pos)
 
     lastXStep, lastYStep = meade.getSteps()
-    xpos -= xsteps
-    ypos -= ysteps
+    # We now dither either 3x3 or 6x6. So do not offset from the center to the corner:
+    #   always reference the dither from the LL spot.
     meade.moveToSteps(xpos, ypos, preload=False)
     if xpos < lastXStep or ypos < lastYStep:
         meade.preloadY(backlash=backlash, ditherWidth=ysteps, startSteps=startSteps)
@@ -834,16 +846,16 @@ col  steps/5um um/step
     if windowHeight is not None:
         _setRowWindow(meade, ypix, windowHeight)
 
-    for y_i in range(ditherWidth):
-        for x_i in range(ditherWidth):
+    for y_i in range(ditherCount):
+        for x_i in range(ditherCount):
             ret = takeBareSpot(meade, nread=nread, row=row)
             callRet.append(ret)
 
-            if x_i != ditherWidth - 1:
+            if x_i != ditherCount - 1:
                 meade.sendMoveCmd(1, f'/1P{xsteps}R')
-        if y_i != ditherWidth - 1:
+        if y_i != ditherCount - 1:
             meade.sendMoveCmd(2, f"/2P{ysteps}R")
-            meade.sendMoveCmd(1, f"/1D{xsteps*(ditherWidth - 1) + backlash}R")
+            meade.sendMoveCmd(1, f"/1D{xsteps*(ditherCount - 1) + backlash}R")
             meade.sendMoveCmd(1, f"/1P{backlash - (xsteps * startSteps)}R")
 
             for i in range(startSteps):
@@ -1095,15 +1107,17 @@ def bestDitherSpot(frames, debug=False):
 
     return df
 
-def allDithers(frames, hxCalib, rad=15, butler=None, doNorm=False, meade=None, r1=-1,  
-               doMeasure=True, debug=False):
+def allDithers(frames, hxCalib, rad=15, scale=3,
+               butler=None, doNorm=False, meade=None, r1=-1,  
+               doMeasure=True, debug=False, writeSpots=False):
     dithers = []
     ids = []
     if debug:
         import pdb; pdb.set_trace()
 
-    for i in range(len(frames)//9):
-        dithFrames = frames.iloc[i*9:(i+1)*9]
+    ndith = scale*scale
+    for i in range(len(frames)//ndith):
+        dithFrames = frames.iloc[i*ndith:(i+1)*ndith]
         print(len(dithFrames))
         try:
             dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm, meade=meade,
@@ -1148,7 +1162,8 @@ def _clearRowWindow(meade):
                     f'clearRowSkipping')
 
 def _loopByWaves(meade, butler, waves, rows, focus,
-                 doDither=False, nread=3, doWindow=True, windowWidth=50):
+                 doDither=False, nread=3, doWindow=True, 
+                 windowWidth=50, ditherFactor=1):
     spotList = []
     for w_i, w in enumerate(waves):
         meade.led(w)
@@ -1164,7 +1179,8 @@ def _loopByWaves(meade, butler, waves, rows, focus,
                 moveFocus(meade.cam, f)
                 try:
                     if doDither:
-                        meas = ditherScan(meade, pos=pos, nread=nread, row=row)
+                        meas = ditherScan(meade, pos=pos, nread=nread, row=row,
+                                          ditherFactor=ditherFactor)
                     else:
                         meas = takeBareSpot(meade, nread=nread, row=row,
                                             comment=f'spotSet_{w}_{round(row)}_{round(f)}')
@@ -1185,7 +1201,8 @@ def _loopByWaves(meade, butler, waves, rows, focus,
     return spotList
 
 def _loopByFocus(meade, butler, focus, rows, waves,
-                 doDither=False, nread=3, doWindow=True, windowWidth=50):
+                 doDither=False, nread=3, doWindow=True, 
+                 windowWidth=50, ditherFactor=1):
     spotList = []
     for f_i, f in enumerate(focus):
         moveFocus(meade.cam, f)
@@ -1201,7 +1218,8 @@ def _loopByFocus(meade, butler, focus, rows, waves,
                 print(f"led {w} on row {int(row)} with focus {f}")
                 try:
                     if doDither:
-                        meas = ditherScan(meade, pos=pos, nread=nread, row=row)
+                        meas = ditherScan(meade, pos=pos, nread=nread, row=row,
+                                          ditherFactor=ditherFactor)
                     else:
                         meade.moveToPix(*pos, preload=True, onlyIfNecessary=True)
                         meas = takeBareSpot(meade, nread=nread, row=row,
@@ -1224,7 +1242,8 @@ def _loopByFocus(meade, butler, focus, rows, waves,
     return spotList
 
 def _loopOverPos(meade, butler, focus, posList,
-                 doDither=False, nread=3, doWindow=True, windowWidth=50):
+                 doDither=False, nread=3, doWindow=True, 
+                 windowWidth=50, ditherFactor=1):
     spotList = []
 
     for f_i, f in enumerate(focus):
@@ -1239,12 +1258,13 @@ def _loopOverPos(meade, butler, focus, posList,
             print(f"led {w} on row {int(row)} with focus {f}")
             try:
                 if doDither:
-                    meas = ditherScan(meade, pos=pos, nread=nread, row=row)
+                    meas = ditherScan(meade, pos=pos, nread=nread, row=row,
+                                      ditherFactor=ditherFactor)
                 else:
                     meade.moveToPix(*pos, preload=True, onlyIfNecessary=True)
                     meas = takeBareSpot(meade, nread=nread, row=row,
                                         comment=f'spotSet_{w}_{round(row)}_{round(f)}')
-            except Exception as e:
+ 
                 raise
 
             meas['row'] = int(row)
@@ -1262,7 +1282,7 @@ def _loopOverPos(meade, butler, focus, posList,
     return spotList
 
 def spotSet(meade, butler=None, waves=None, rows=None, posList=None, focus=None,
-            doDither=False, nread=3, doWindow=True, windowWidth=50,
+            doDither=False, nread=3, doWindow=True, windowWidth=50, ditherFactor=1,
             byFocus=True):
     """Primary acquisition routine: takes a (wave, row, focus) grid of spots or dithers
 
@@ -1328,15 +1348,20 @@ def spotSet(meade, butler=None, waves=None, rows=None, posList=None, focus=None,
         if posList is not None:
             spotList = _loopOverPos(meade, butler, focus, posList,
                                     doDither=doDither, nread=nread,
-                                    doWindow=doWindow, windowWidth=windowWidth)
+                                    doWindow=doWindow, windowWidth=windowWidth,
+                                    ditherFactor=ditherFactor)
         elif byFocus:
             spotList = _loopByFocus(meade, butler, focus, rows, waves,
                                     doDither=doDither, nread=nread,
-                                    doWindow=doWindow, windowWidth=windowWidth)
+                                    doWindow=doWindow, windowWidth=windowWidth,
+                                    ditherFactor=ditherFactor)
+
         else:
             spotList = _loopByWaves(meade, butler, waves, rows, focus,
                                     doDither=doDither, nread=nread,
-                                    doWindow=doWindow, windowWidth=windowWidth)
+                                    doWindow=doWindow, windowWidth=windowWidth,
+                                    ditherFactor=ditherFactor)
+
     except Exception as e:
         print(f'oops: {e}')
         # breakpoint()
