@@ -1289,6 +1289,7 @@ def _loopOverPos(meade, butler, focus, posList,
                     meas = takeBareSpot(meade, nread=nread, row=row,
                                         comment=f'spotSet_{w}_{round(row)}_{round(f)}')
  
+            except Exception as e:
                 raise
 
             meas['row'] = int(row)
