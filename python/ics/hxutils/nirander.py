@@ -971,18 +971,30 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, r1=-1):
         yoff = yoffsets[f1.ystep]
         print(f'{f1.visit:0.0f}: wave: {f1.wavelength} row: {f1.row} focus: {f1.focus} '
               f'pix: {xoff} {yoff} {pixFromStep} step: {f1.xstep:0.0f},{f1.ystep:0.0f} '
-              f'bkgnd: {bkgnd:0.3f} '
+              f'bkgnd: {bkgnd:0.3f} ')
               #f'ctr: {f1.xpix:0.2f},{f1.ypix:0.2f} bkgnd: {bkgnd:0.3f} '
-              f'scale: {normSum:0.1f}/{imSum:0.1f}={normSum/imSum:0.3f}')
+              #f'scale: {normSum:0.1f}/{imSum:0.1f}={normSum/imSum:0.3f}')
         outIm[yoff::scale, xoff::scale] = im
         inIms.append(im)
 
-        out1 = outIm*0
-        out1[yoff::scale, xoff::scale] = im
-        outIms.append(out1)
+        if writeSpots and butler is not None:
+            writeOneSpot(frames, fIdx, im, butler)
+    return outIm, inIms, None
 
-    return outIm, inIms, outIms
+def writeOneSpot(ditherFrame, rowIdx, spotIm, butler):
+    xmin = ditherFrame.xstep.min()
+    ymin = ditherFrame.ystep.min()
 
+    spotRow = ditherFrame.loc[rowIdx]
+    spotIds = dict(visit=int(spotRow.visit),
+                   wavelength=int(spotRow.wavelength),
+                   row=int(spotRow.row),
+                   focus=int(spotRow.focus),
+                   xstep=int(spotRow.xstep - xmin),
+                   ystep=int(spotRow.ystep - ymin))
+    path = butler.getPath('ditherSpot', idDict=spotIds)
+    writeRowImage(path, spotRow, spotIm)
+    
 def ditherPath(butler, row, pfsDay=None):
     if pfsDay is None:
         idDict = dict(visit=int(row.visit),
@@ -1002,36 +1014,31 @@ def ditherPath(butler, row, pfsDay=None):
 
 def ditherPaths(butler, rows, pfsDay='*'):
     paths = []
-    for i in range(0, len(rows), 9):
-        row = rows.iloc[i]
-        path = ditherPath(butler, row, pfsDay=pfsDay)[0]
+    for gname, grp in rows.groupby(['wavelength', 'row', 'focus']):
+        ditherRow = grp.reset_index(drop=True).iloc[0]
+        path = ditherPath(butler, ditherRow, pfsDay=pfsDay)[0]
         paths.append(path)
     return paths
 
-def writeDither(row, butler, dithIm):
-    """Save a dither and measurements to disk
+def writeRowImage(path, row, image):
+    """Save an image and measurements to disk
 
     Parameters
     ----------
     row : `pd.DataFrame`
-        The measurements for the dither
+        The measurements for the image
     butler : `nirander.Butler`
         Knows where to save files.
-    dithIm : image
-        The dither itself.
+    image : image
+        The spot/dither image itself.
     """
-    idDict = dict(visit=int(row.visit),
-                  wavelength=int(row.wavelength),
-                  focus=int(row.focus),
-                  row=int(row.row))
-    path = butler.get('dither', idDict=idDict)
     hdr = [dict(name='VISIT', value=int(row.visit), comment="visit of 0,0 image"),
             dict(name='WAVE', value=float(row.wavelength)),
             dict(name='FOCUS', value=float(row.focus)),
             dict(name='ROW', value=int(row.row), comment="rounded row number, for easy grouping")]
     try:
-        hdr.extend([dict(name='XPIX0', value=float(row.xpix0), comment="calculated xc of 0,0 image"),
-                    dict(name='YPIX0', value=float(row.ypix0), comment="calculated yc of 0,0 image")])
+        hdr.extend([dict(name='XPIX0', value=float(row.xpix0), comment="predicted xc of 0,0 image"),
+                    dict(name='YPIX0', value=float(row.ypix0), comment="predicted yc of 0,0 image")])
     except AttributeError:
         pass
     try:
@@ -1062,10 +1069,8 @@ def writeDither(row, butler, dithIm):
             hdr.append(h)
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    fitsio.write(path, dithIm, header=hdr, clobber=True)
-    logger.info(f'wrote dither {path}')
-
-    return idDict
+    fitsio.write(path, image, header=hdr, clobber=True)
+    logger.info(f'wrote {path}')
 
 def ditherScales(frames, debug=False):
     """Get just the 3x3 dither measured positions. """
@@ -1120,17 +1125,20 @@ def allDithers(frames, hxCalib, rad=15, scale=3,
         dithFrames = frames.iloc[i*ndith:(i+1)*ndith]
         print(len(dithFrames))
         try:
-            dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, doNorm=doNorm, meade=meade,
-                                       r1=r1)
+            dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, scale=scale,
+                                       doNorm=doNorm, meade=meade,
+                                       r1=r1, writeSpots=writeSpots, butler=butler)
         except Exception as e:
             print(f'failed to create dither from {dithFrames.visit.values[0]}: {e}')
+            raise
             continue
 
         dithers.append(dith1)
 
         if butler is not None:
             row = dithFrames.iloc[0]
-            idDict = writeDither(row, butler, dith1)
+            path = ditherPath(butler, row)
+            idDict = writeRowImage(path, row, dith1)
             ids.append(idDict)
 
     df = pd.DataFrame(ids)        
