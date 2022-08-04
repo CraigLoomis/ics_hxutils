@@ -34,6 +34,8 @@ dataMap['postageStamp'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{exper
                                "ps-{visit:06d}-{cam}.fits")
 dataMap['dither'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
                          "dither-{wavelength:04.0f}_{row:04.0f}_{focus:03.0f}_{visit:06d}-{cam}.fits")
+dataMap['ditherSpot'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
+                            "ditherSpot-{int(wavelength):04d}_{int(row):04d}_{int(focus):03d}_{xstep:03d}_{ystep:03d}_{visit:06d}-{cam}.fits")
 
 dataMap['repeatsGrid'] = dict(template="{nirLabReduxRoot}/{cam}/{pfsDay}/{experimentName}/"
                               "repeatsGrid-{wavelength:04.0f}_{row:04.0f}-{cam}.fits")
