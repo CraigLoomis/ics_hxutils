@@ -358,6 +358,7 @@ class GimbalIlluminator(Illuminator):
 
         self._leds = pd.DataFrame(cfg['leds'])
         self._leds = self._leds.set_index('wave', drop=False)
+        self.rows = (np.array(cfg['rowsMM']) / 0.015 + 2048).astype('i4')
 
         # We get the monochrometer positions as mm from center of detector. Convert to pixels.
         self.mono = pd.DataFrame(cfg['mono'])
@@ -375,6 +376,10 @@ class GimbalIlluminator(Illuminator):
         else:
             self.lamps = self._leds
 
+    @property
+    def waves(self):
+        return self.lamps.wave.to_numpy()
+    
     @classmethod
     def fitTransform(cls, scans, transform=None, transformArgs=None):
         if transform is None:
