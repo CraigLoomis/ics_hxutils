@@ -788,9 +788,9 @@ def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8,
 def dispDitherDetails(disp, butler, ditherSet):
     setupDisp(disp)
 
-def ditherDiag1(df):
+def ditherDiag1(df, nsteps=3):
     """Show the measured positions of all individual dither spots. """
-    names, xspans, yspans = nirander.ditherScales(df)
+    names, xspans, yspans = nirander.ditherScales(df, nsteps=nsteps)
     
     f,pl = plt.subplots(ncols=2, clear=True)
     p1, p2 = pl
@@ -810,8 +810,9 @@ def ditherDiag1(df):
     p1.set_xlim(-0.25, 1.0)
     p1.set_ylim(-0.25, 1.0)
 
-    p1.hlines([0,0.33,0.66], xmin=-0.25, xmax=1, alpha=0.5, color='k', linewidth=0.2)
-    p1.vlines([0,0.33,0.66], ymin=-0.25, ymax=1, alpha=0.5, color='k', linewidth=0.2)
+    steplist = np.linspace(0, 1, nsteps, endpoint=False )
+    p1.hlines(steplist, xmin=-0.25, xmax=1, alpha=0.5, color='k', linewidth=0.2)
+    p1.vlines(steplist, ymin=-0.25, ymax=1, alpha=0.5, color='k', linewidth=0.2)
 
     xr = np.array(xr)
     yr = np.array(yr)
