@@ -122,12 +122,14 @@ def badMask_sigma(ramp, sigma=2):
             p1 = cds[y:y+patchSize, x:x+patchSize]
             pmed = np.median(p1)
             pdev = np.std(p1)
+            clip = np.abs(p1 - pmed) >= pdev*sigma
 
-            mask[y:y+patchSize, x:x+patchSize] = np.abs(p1 - pmed) >= pdev*sigma
+            mask[y:y+patchSize, x:x+patchSize] = clip
 
+    logger.info(f'{sigma} {mask.sum()}')
     return mask
 
-def badMask(ramp, r0thresh=5000):
+def badMask(ramp, r0thresh=5000, sigma=3):
     """Build up a mask from a set of tests, with each represented by a bitplane.
 
     Currently just:
@@ -135,8 +137,9 @@ def badMask(ramp, r0thresh=5000):
     """
 
     _, r0mask = badMask_r0(ramp, thresh=r0thresh)
-
-    finalMask = (r0mask * 0x01).astype('i4')
+    sigmask = badMask_sigma(ramp, sigma=sigma)
+    # lowmask = badMask_noflux(ramp)
+    finalMask = (r0mask * 0x01 | sigmask * 0x02).astype('i4')
 
     return finalMask
 
