@@ -195,6 +195,7 @@ def selectDithers(rows, *, wavelength=None, row=None, focus=None):
 
 def measureDithers(butler, rows, thresh=50,
                    radius=30, searchRadius=10,
+                   ditherPixelSize=5.0,
                    hxcalib=None, pfsDay='*'):
     """Center up and measure dithers
 
@@ -287,7 +288,7 @@ def measureDithers(butler, rows, thresh=50,
         if np.isnan(peaks.xpix.values[0]):
             logger.warning(f"peaks for {path} not measured")
         else:
-            peaks['size'] *= 5
+            peaks['size'] *= ditherPixelSize
             ee1 = centeredDither[ctrY, ctrX]
             if peaks['size'].values[0] < 8: # Avoid checking donuts.
                 if ee1 < centeredDither[ctrY-1, ctrX] or ee1 < centeredDither[ctrY+1, ctrX] or ee1 < centeredDither[ctrY, ctrX-1] or ee1 < centeredDither[ctrY, ctrX+1]:
