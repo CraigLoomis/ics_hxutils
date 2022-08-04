@@ -19,25 +19,21 @@ def medianCubes(paths, r0=0, r1=-1):
         raise ValueError('all ramps must have the same number of reads')
 
     ramp0 = ramps[0]
-    nreads = ramp0.nreads
-    _reads = range(nreads)
+    _reads = range(ramp0.nreads)
     r0 = _reads[r0]
     r1 = _reads[r1]
-
+    ncds = r1 - r0
     nvisits = len(paths)
     read0 = ramp0.readN(r0)
 
-    print(f'dark cube: {nvisits} visits, {nreads} reads from {r0} to {r1}')
+    print(f'dark cube: {nvisits} visits, {ncds} CDS from {r0} to {r1}')
     # The stack of the frames fomr all the visits for a _single_ given read.
     tempStack = np.empty(shape=(nvisits, *(read0.shape)),
                          dtype=read0.dtype)
     del read0
-    for read_i in range(r0, r1+1):
-        if read_i == r0:
-            read0s = [r.readN(r0) for r in ramps]
-            outStack = np.empty(shape=(nreads, *(read0s[0].shape)), dtype=read0s[0].dtype)
-
-            continue
+    read0s = [r.readN(r0) for r in ramps]
+    outStack = np.empty(shape=(ncds, *(read0s[0].shape)), dtype=read0s[0].dtype)
+    for cds_i, read_i in enumerate(range(r0+1, r1+1)):
         for ramp_i, ramp1 in enumerate(ramps):
             read1 = ramp1.readN(read_i)
             cds1 = read1-read0s[ramp_i]
