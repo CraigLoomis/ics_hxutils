@@ -47,7 +47,7 @@ def medianCubes(paths, r0=0, r1=-1):
                 cds1 -= dmed
             tempStack[ramp_i, :, :] = cds1
 
-        outStack[read_i, :, :] = np.median(tempStack, axis=0)
+        outStack[cds_i, :, :] = np.median(tempStack, axis=0)
 
     return outStack
 
