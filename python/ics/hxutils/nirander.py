@@ -1,4 +1,5 @@
 from importlib import reload
+import glob
 import logging
 import os.path
 import socket
@@ -1727,6 +1728,28 @@ def takeSpot(meade, pos=None, focus=None, light=None, nread=3, comment="no_comme
 
     if light is not None:
         meade.lampsOff()
+    return df
+
+def constructDitherFrame(cam, pfsDay, name):
+    """Construct a dither DataFrame from a directory of dither images. """
+    flist = glob.glob(f'/data/redux/{cam}/{pfsDay}/{name}/dither-*.fits')
+    flist = sorted(flist)
+    waves = []
+    rows = []
+    focuses = []
+    visits = []
+
+    for f in flist:
+        f = os.path.basename(f)
+        _, ids, _ = f.split('-')
+        parts = ids.split('_')
+        wave, row, focus, visit = [int(p, base=10) for p in parts]
+        waves.append(wave)
+        rows.append(row)
+        focuses.append(focus)
+        visits.append(visit)
+
+    df = pd.DataFrame(dict(visit=visits, wavelength=waves, focus=focuses, row=rows))
     return df
 
 def oneSpotFromDither(df):
