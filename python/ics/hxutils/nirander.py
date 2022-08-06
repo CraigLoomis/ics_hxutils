@@ -101,25 +101,43 @@ class AidanPi(object):
             t0 = time.time()
             while True:
                 rcvd = str(sock.recv(1024), "latin-1")
-                rcvd = rcvd.strip()
-                replyBuffer += rcvd
+                replyBuffer += rcvd.strip()
                 if not shush:
-                    logFunc(f'rcvd: {rcvd}, reply: {replyBuffer}')
-                if replyBuffer.endswith('OK') or replyBuffer.endswith('BAD'):
+                    logFunc(f'rcvd: {rcvd.strip()}, reply: {replyBuffer}')
+                if rcvd.endswith('\n'):
                     break
                 t1 = time.time()
                 if t1-t0 > maxTime:
                     self.logger.fatal(f"reply timed out after {t1-t0} seconds")
-                    break
+                    raise RuntimeError(f"timeout; buffer={replyBuffer}")
                 time.sleep(0.1)
 
-        if 'BAD' in replyBuffer:
+        try:
+            parts = replyBuffer.split(';')
+        except ValueError:
             raise RuntimeError(f"received unknown crap: {replyBuffer}")
-        if not replyBuffer.endswith('OK'):
-            raise RuntimeError(f"received unfinished crud: {replyBuffer}")
-
-        parts = replyBuffer.split(';')
-        return parts[0]
+        if len(parts) == 10:
+            OK, readyx, errorx, infox, _, _, readyy, errory, infoy, _ = parts
+            if OK != 'OK':
+                raise RuntimeError(f"move command failed with {errorx}/{errory}, from {replyBuffer}")
+            return infox + infoy
+        elif len(parts) == 5:
+            OK, ready, error, info, _ = parts
+            if OK != 'OK':
+                raise RuntimeError(f"move command failed with {error}, from {replyBuffer}")
+            return info
+        elif len(parts) == 3: # Some monochrometer commands
+            OK, result, result2 = replyBuffer.split(';')
+            if OK != 'OK':
+                raise RuntimeError(f'failure 3: {replyBuffer}')
+            return result + result2
+        elif len(parts) == 2:
+            OK, result = replyBuffer.split(';')
+            if OK != 'OK':
+                raise RuntimeError(f'failure 3: {replyBuffer}')
+            return result
+        else:
+            raise RuntimeError(f"received unknown crap: {replyBuffer}")
 
 class PlateIlluminator:
     def __init__(self, forceLedOff=True, logLevel=logging.INFO, ip=None):
@@ -927,7 +945,7 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None,
     outIms : list of images
         The dither component images.
     """
-    frames = frames.sort_values('visit', ascending=True)
+    frames = frames.sort_values('visit', ascending=True).reset_index(drop=True)
     ctrIdx = (scale*scale)//2
     xsteps = frames['xstep'].unique()
     ysteps = frames['ystep'].unique()
@@ -936,7 +954,7 @@ def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None,
     yoffsets = {ys:(scale-1)-yi for yi,ys in enumerate(ysteps)}
     # Need better sanity checks
     if len(frames) != scale*scale or len(xsteps) != scale or len(ysteps) != scale:
-        raise ValueError(f"only want to deal with {scale}x{scale} dithers")
+        raise ValueError(f"only want to deal with {scale}x{scale} dithers ({len(frames)})")
 
     if 'xpix' not in frames or np.isnan(frames.xpix.values[ctrIdx]):
         pixFromStep = True
@@ -1074,6 +1092,8 @@ def writeRowImage(path, row, image):
     fitsio.write(path, image, header=hdr, clobber=True)
     logger.info(f'wrote {path}')
 
+    return row
+
 def ditherScales(frames, debug=False, nsteps=3):
     """Get just the 3x3 dither measured positions. """
     gnames = []
@@ -1117,15 +1137,64 @@ def bestDitherSpot(frames, debug=False):
 def allDithers(frames, hxCalib, rad=15, scale=3,
                butler=None, doNorm=False, meade=None, r1=-1,  
                doMeasure=True, debug=False, writeSpots=False):
+    """Compose dithers for all the complete dither sets.
+
+    Parameters
+    ----------
+    frames : DataFrame
+        the non-necessarily measured spots
+    hxCalib : HxCalib
+        something which can give us an isr()ed image
+    rad : int, optional
+        the radius to search and compose from, by default 15
+    scale : int, optional
+        the number of spots making up the dither, by default 3
+    butler : butler, optional
+        know how to resolve paths, by default None
+    doNorm : bool, optional
+        Remove this, Craig, by default False
+    meade : GimbalIlluminator, optional
+        knows various things about the acquired data, by default None
+    r1 : int, optional
+        the final read index to use in the ramp, by default -1
+    doMeasure : bool, optional
+        whether to measure the dither (not yet wired in), by default True
+    debug : bool, optional
+        whether to drop to pdb, by default False
+    writeSpots : bool, optional
+        whether to save the stamps of the component spots, by default False
+
+    Returns
+    -------
+    ditherFrame : `pd.DataFrame`
+        the from of composed dithers.
+
+    Notes
+    -----
+    If `scale` is set and is smaller than the number of available spots,
+    any additional UR spots are trimmed off before the ditehr is composed.
+    """
     dithers = []
     ids = []
     if debug:
         import pdb; pdb.set_trace()
 
     ndith = scale*scale
-    for i in range(len(frames)//ndith):
-        dithFrames = frames.iloc[i*ndith:(i+1)*ndith]
-        print(len(dithFrames))
+    for gname, dithFrames in frames.groupby(['wavelength', 'row', 'focus']):
+        if len(dithFrames) != ndith:
+            startLen = len(dithFrames)
+            dithFrames = dithFrames.sort_values(['ystep', 'xstep']).reset_index(drop=True)
+
+            # Keep the *last* rows and columns
+            xvals = dithFrames.xstep.unique()
+            yvals = dithFrames.ystep.unique()
+            xvals = xvals[len(xvals)-scale:]
+            yvals = yvals[len(yvals)-scale:]
+
+            dithFrames = dithFrames[(dithFrames.xstep.isin(xvals)) & (dithFrames.ystep.isin(yvals))]
+            logger.warning(f'{gname}: clipped dither set from {startLen} to {ndith}({len(dithFrames)})')
+            
+            
         try:
             dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, scale=scale,
                                        doNorm=doNorm, meade=meade,
