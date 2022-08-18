@@ -194,7 +194,7 @@ def selectDithers(rows, *, wavelength=None, row=None, focus=None):
     return dithers.reset_index(drop=True)
 
 def measureDithers(butler, rows, thresh=50,
-                   radius=30, searchRadius=10,
+                   radius=10, searchRadius=10,
                    ditherPixelSize=5.0,
                    hxcalib=None, pfsDay='*'):
     """Center up and measure dithers
