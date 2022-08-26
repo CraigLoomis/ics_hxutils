@@ -1561,26 +1561,32 @@ def trimRect(im, c, r=100):
 def rectMask(mask, center, radius=100):
     """zero out pixels rectangularily further than radius from ctr. """
 
+    radius = radius-1
     newMask = mask.copy()
-    ctrX = round(center[0])
-    ctrY = round(center[1])
+    xci = round(center[0])
+    yci = round(center[1])
     preCount = mask.sum()
-    newMask[:max(0, (ctrY-radius)), :] = 1
-    newMask[min(4095, ctrY+radius):, :] = 1
-    newMask[:, :max(0, (ctrX-radius))] = 1
-    newMask[:, min(4095, (ctrX+radius)):] = 1
-    # logger.debug(f'{ctrX}, {ctrY}, {radius} {preCount} {newMask.sum()}')
+    newMask[:max(0, (yci-radius)), :] = 1
+    newMask[min(4095, yci+radius+1):, :] = 1
+    newMask[:, :max(0, (xci-radius))] = 1
+    newMask[:, min(4095, (xci+radius+1)):] = 1
+    # logger.debug(f'{xci}, {yci}, {radius} {preCount} {newMask.sum()}')
 
     return newMask
 
 def getPeaks(im, thresh=250.0, mask=None, center=None, radius=10,
-             searchRadius=5,
+             searchRadius=5, simpleBackground=False,
              convolveSigma=None, kernel=True):
 
-    if center is not None and mask is not None:
+    if center is not None:
+        if mask is None:
+            mask = np.zeros_like(im, dtype='bool')
         mask = rectMask(mask, center, radius)
-    bkgnd = sep.Background(im.astype('f4'), mask=mask)
-    bkg = bkgnd.back()
+    if simpleBackground:
+        bkg = np.median(im[~mask])
+    else:
+        bkgnd = sep.Background(im.astype('f4'), mask=mask)
+        bkg = bkgnd.back()
     corrImg = im - bkg
 
     if convolveSigma is not None:
@@ -1608,6 +1614,12 @@ def getPeaks(im, thresh=250.0, mask=None, center=None, radius=10,
         center = np.atleast_2d(center)
         keep_w = cdist(spotsFrame[["x","y"]], center) <= searchRadius
         spotsFrame = spotsFrame.loc[keep_w]
+
+    if np.isscalar(bkg):
+        spotsFrame['background'] = bkg
+        logger.warning(f' simple background: {bkg}')
+    else:
+        spotsFrame['background'] = np.median(bkg)
 
     return corrImg, spotsFrame
 
