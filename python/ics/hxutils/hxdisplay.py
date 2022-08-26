@@ -648,6 +648,8 @@ def setupDisp(disp, doClear=True, zoom=8, tileGrid=None,
     ds9CmdStr = '; '.join(ds9Cmds)
     disp.set(ds9CmdStr)
 
+    return '; '.join(moreCmds)
+
 def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=None, hxcalib=None,
               zoom=8, lockImage=False, lockScale=True, badMask=None, doOrder=True,
               scaleType='asinh', scaleLimits=None, ims=None, targetPos=False):
@@ -664,9 +666,9 @@ def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=No
         df = df.sort_values(by=['row', 'wavelength'],
                             ascending=[False, False])
 
-    setupDisp(disp, doClear=doClear, zoom=zoom, tileGrid=tileGrid,
-              lockImage=lockImage, lockScale=lockScale,
-              scaleType=scaleType, scaleLimits=scaleLimits)
+    ds9Setup = setupDisp(disp, doClear=doClear, zoom=zoom, tileGrid=tileGrid,
+                         lockImage=lockImage, lockScale=lockScale,
+                         scaleType=scaleType, scaleLimits=scaleLimits)
 
     for i_i, (i, row) in enumerate(df.iterrows()):
         disp.set('frame new')
@@ -696,7 +698,9 @@ def dispSpots(disp, df, doClear=True, maxRows=16, tileGrid=None, r1=-1, meade=No
         disp.set(f'pan to {xpix} {ypix} image')
         disp.set('lock scalelimits; lock scale')
 
-def ditherName(butler, group, pfsDay='*'):
+    disp.set(ds9Setup)
+
+def ditherName(butler, group, raw=False, pfsDay='*'):
     """Given a dither group, return the dither FITS file name. """
     focus = group.focus.unique()
     if len(focus) != 1:
