@@ -230,8 +230,8 @@ def measureDithers(butler, rows, thresh=50,
     centeredPeaks = []
     for r_i in range(len(rows)):
         row = rows.iloc[r_i:r_i+1].copy()
-        path = nirander.ditherPath(butler, row, pfsDay=pfsDay)
-        dither, hdr = fitsio.read(path, header=True)
+        rawPath = nirander.ditherPath(butler, row, raw=True, pfsDay=pfsDay)
+        dither, hdr = fitsio.read(rawPath, header=True)
         rawDithers.append(dither)
 
         # Hmm. Assumes that the dither is basically centered already. But
@@ -242,11 +242,11 @@ def measureDithers(butler, rows, thresh=50,
         meas = nirander.measureSet(row, center=ditherCtr,
                                    radius=radius, searchRadius=searchRadius,
                                    ims=[dither],
-                                   hxCalib=hxcalib,  thresh=thresh, doClear=True)
+                                   hxCalib=hxcalib, thresh=thresh, doClear=True)
         if len(meas) != 1:
-            raise RuntimeError(f"{len(meas)} peaks for {path}: {meas}")
+            raise RuntimeError(f"{len(meas)} peaks for {rawPath}: {meas}")
         if np.isnan(meas.xpix.values[0]):
-            logger.warning(f"peak for {path} not measured")
+            logger.warning(f"peak for {rawPath} not measured")
             centeredDithers.append(dither)
             centeredPeaks.append(meas)
             continue
@@ -284,9 +284,9 @@ def measureDithers(butler, rows, thresh=50,
                                     hxCalib=hxcalib, thresh=thresh, doClear=True)
         # _, peaks = nirander.getPeaks(dith, center=ctr, radius=5)
         if len(peaks) != 1:
-            raise RuntimeError(f"{len(peaks)} peaks for {path}: {peaks}")
+            raise RuntimeError(f"{len(peaks)} peaks for {rawPath}: {peaks}")
         if np.isnan(peaks.xpix.values[0]):
-            logger.warning(f"peaks for {path} not measured")
+            logger.warning(f"peaks for {rawPath} not measured")
         else:
             peaks['size'] *= ditherPixelSize
             ee1 = centeredDither[ctrY, ctrX]
@@ -307,8 +307,9 @@ def measureDithers(butler, rows, thresh=50,
                                                center=[ctrX, ctrY],)
             peaks['rms2'] = rms * ditherPixelSize
             logger.info(f'{peaks["size"]} vs {peaks["rms2"]}, ({mnx}, {mny})')
-            
-            nirander.writeRowImage(peaks, butler, centeredDither)
+
+            path = nirander.ditherPath(butler, row, raw=False, pfsDay=pfsDay)
+            nirander.writeRowImage(path, peaks, centeredDither)
 
         centeredDithers.append(centeredDither)
         centeredPeaks.append(peaks)
