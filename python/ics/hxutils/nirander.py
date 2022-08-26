@@ -1770,12 +1770,10 @@ def rbSpot(spot):
     for x in range(w):
         for y in range(h):
             pxlFlux = spot[y,x]
-            if pxlFlux < 0:
-                pxlFlux = 1e-3
+            if pxlFlux <= 0:
+                continue
             
             temp = pxlFlux + totalFlux
-            if temp == 0:
-                temp = 1.0
             deltaX = (x + 1) - xMean
             deltaY = (y + 1) - yMean
 
@@ -1792,7 +1790,7 @@ def rbSpot(spot):
     xSigma = np.sqrt(xVar)
     ySigma = np.sqrt(yVar)
     rms = np.sqrt((xSigma * xSigma) + (ySigma * ySigma))
-    print(f'    {rms:0.2f}, {totalFlux:0.2f}  ({xVar:0.2f},{yVar:0.2f}) ({xSigma:0.2f},{ySigma:0.2f}) ({xM2:0.2f},{yM2:0.2f})')
+    print(f'    rb {rms:0.2f}, {totalFlux:0.2f}  ({xVar:0.2f},{yVar:0.2f}) ({xSigma:0.2f},{ySigma:0.2f}) ({xM2:0.2f},{yM2:0.2f})')
 
     return rms, xMean-1, yMean-1
 
