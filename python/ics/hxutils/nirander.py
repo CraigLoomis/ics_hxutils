@@ -958,7 +958,7 @@ def ditherTest(meade, hxCalib, nreps=3, start=(2000,2000), npos=10):
 
     return xreps, yreps
 
-def createDither(frames, hxCalib, rad=15, doNorm=False, meade=None, 
+def createDither(frames, hxCalib, rad=10, meade=None, 
                  scale=3, r1=-1, writeSpots=False, butler=None):
     """Create a dithered spot from 9 individual raw spots.
 
