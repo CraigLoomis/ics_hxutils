@@ -75,7 +75,45 @@ class AidanPi(object):
     def __repr__(self):
         return self.__str__()
 
-    def cmd(self, cmdStr, debug=False, maxTime=5.0, shush=False):
+    def waitForMoveEnd(self, sock, axes=None, maxTime=5.0):
+        if axes is None:
+            axes = [1,2]
+        elif np.isscalar(axes):
+            axes = tuple(axes)
+        maxTime = time.time() + maxTime
+        while time.time() < maxTime:
+            checks = [self._cmd(f'/{ax}Q', sock,  
+                                maxTime=maxTime, logFunc=self.logger.warning) for ax in axes]
+            done = [c.split(';')[1] == 'READY' for c in checks]
+            self.logger.warning(f'wait({axes}, ): {done} {checks}')
+            if all(done):
+                return
+            raise RuntimeError(f'timed out waiting {maxTime}s for move end')
+            time.sleep(0.1)
+
+    def _cmd(self, cmdStr, sock, logFunc=None, maxTime=5.0, shushReply=False):
+        if logFunc is not None:
+            logFunc(f'send: {cmdStr.strip()}')
+        sock.sendall(cmdStr. encode('latin-1'))
+
+        replyBuffer = ""
+        t0 = time.time()
+        while True:
+            rcvd = str(sock.recv(1024), "latin-1")
+            replyBuffer += rcvd.strip()
+            if logFunc is not None and not shushReply:
+                logFunc(f'rcvd: {rcvd.strip()}, reply: {replyBuffer}')
+            if rcvd.endswith('\n'):
+                break
+            t1 = time.time()
+            if t1-t0 > maxTime:
+                self.logger.fatal(f"reply timed out after {t1-t0} seconds")
+                raise RuntimeError(f"timeout; buffer={replyBuffer}")
+            time.sleep(0.1)
+        return replyBuffer
+
+    def cmd(self, cmdStr, debug=False, maxTime=5.0, shush=False, 
+            shushReply=False, returnParts=False, doBlock=False):
         """ Send a single motor command.
 
         Args
@@ -94,28 +132,23 @@ class AidanPi(object):
         replyBuffer = ""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((self.host, self.port))
-            if not shush:
-                logFunc(f'send: {cmdStr.strip()}')
-            sock.sendall(bytes(cmdStr, "latin-1"))
 
-            t0 = time.time()
-            while True:
-                rcvd = str(sock.recv(1024), "latin-1")
-                replyBuffer += rcvd.strip()
-                if not shush:
-                    logFunc(f'rcvd: {rcvd.strip()}, reply: {replyBuffer}')
-                if rcvd.endswith('\n'):
-                    break
-                t1 = time.time()
-                if t1-t0 > maxTime:
-                    self.logger.fatal(f"reply timed out after {t1-t0} seconds")
-                    raise RuntimeError(f"timeout; buffer={replyBuffer}")
-                time.sleep(0.1)
-
-        try:
-            parts = replyBuffer.split(';')
-        except ValueError:
-            raise RuntimeError(f"received unknown crap: {replyBuffer}")
+            replyBuffer = self._cmd(cmdStr, sock, logFunc=logFunc, 
+                                    maxTime=maxTime, shushReply=shushReply)
+ 
+            try:
+                parts = replyBuffer.split(';')
+            except ValueError:
+                raise RuntimeError(f"received unknown crap: {replyBuffer}")
+            OK, *rest = replyBuffer.split(';')
+            if OK != 'OK':
+                raise RuntimeError(f"command failed with {replyBuffer}")
+            if returnParts:
+                return replyBuffer.split(';')
+            if doBlock:
+                self.waitForMoveEnd(sock, maxTime=maxTime)
+                return ''
+            
         if len(parts) == 10:
             OK, readyx, errorx, infox, _, _, readyy, errory, infoy, _ = parts
             if OK != 'OK':
@@ -497,11 +530,21 @@ class GimbalIlluminator(Illuminator):
         xPos, yPos = self.getSteps()
         self.moveToSteps(xPos+dx, yPos+dy)
 
-    def _waitForMoveEnd(self, axis, waitTime=0.1, maxTime=30):
+    def _waitForMoveEnd0(self, axis, waitTime=0.1, maxTime=30, shush=True):
         waitUntil = time.time() + maxTime
         while True:
-            check = self.dev.cmd(f"/{axis}Q", shush=True)
+            check = self.dev.cmd(f"/{axis}Q", shush=shush)
             if '`' in check:
+                return
+            if time.time() >= waitUntil:
+                raise RuntimeError(f'timed out waiting for end of move on axis {axis}')
+            time.sleep(waitTime)
+
+    def _waitForMoveEnd(self, axis, waitTime=0.05, maxTime=30, shush=True):
+        waitUntil = time.time() + maxTime
+        while True:
+            parts = self.dev.cmd(f"/{axis}Q", shush=shush, returnParts=True)
+            if parts[1] == 'READY':
                 return
             if time.time() >= waitUntil:
                 raise RuntimeError(f'timed out waiting for end of move on axis {axis}')
@@ -594,7 +637,9 @@ class GimbalIlluminator(Illuminator):
         dist = max(abs(x-xPos), abs(y-yPos))
         cmdStr = f"move {x} {y}"
         self.dev.cmd(cmdStr, debug=True, maxTime=dist/1000)
-
+        self._waitForMoveEnd(1, maxTime=dist/1000)
+        self._waitForMoveEnd(2, maxTime=dist/1000)
+        
         # For the preload, if *either* motor is > requested pos, move both below target.
         if preload and (y < yPos):
             self.preloadY(y, startSteps=0)
