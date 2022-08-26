@@ -492,17 +492,17 @@ def dispCdsRamp(ramp, disp, r0=1, r1=-1):
 
     disp.set('scale zscale')
 
-def dispStackedVisits(disp, visits, cam, doClear=True, medSubtract=True,
-                      r0=0, r1=-1):
+def dispStackedVisits(disp, df, meade, doClear=True, medSubtract=True,
+                      calib=None, r0=0, r1=-1):
     """Display the sum of a list of visit CDSes.
 
     Parameters
     ----------
     disp : DS9
         The DS9 display to write to
-    visits : array of int
+    df : dataFrame
         The visits to load
-    cam : `str`
+    meade : `str`
         The name of the camera -- e.g. "n3"
     doClear : bool, optional
         Whether to delete all existing frames in the display, by default True
@@ -525,11 +525,14 @@ def dispStackedVisits(disp, visits, cam, doClear=True, medSubtract=True,
         disp.set('tile yes')
 
     stackedImage = None
-    if isinstance(visits, int):
-        visits = [visits]
-    for v in visits:
-        path = hx.rampPath(v, cam=cam)
-        cds = hxramp.HxRamp(path).cdsN(r0=r0, r1=r1)
+    for i_i, (i, row) in enumerate(df.iterrows()):
+        if calib is not None:
+            cds = calib.isr(visit=row.visit, r1=r1)
+        else:
+            path = pathUtils.rampPath(visit=row['visit'], cam=meade.cam)
+            ramp = hxramp.HxRamp(path)
+            cds = ramp.cdsN(r1=r1)
+
         if medSubtract:
             cds -= np.median(cds)
         if stackedImage is None:
@@ -539,6 +542,12 @@ def dispStackedVisits(disp, visits, cam, doClear=True, medSubtract=True,
 
     disp.set('frame new')
     disp.set_np2arr(stackedImage)
+
+    row = df.head(1).squeeze()
+    xpix, ypix = getPix(row, meade)
+    disp.set(f'pan to {xpix} {ypix} image')
+    disp.set('lock scalelimits; lock scale')
+
 
     return stackedImage
 
