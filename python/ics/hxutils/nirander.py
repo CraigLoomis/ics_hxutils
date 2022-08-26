@@ -674,6 +674,8 @@ class GimbalIlluminator(Illuminator):
         except KeyError:
             pass
 
+        # post 2022-08-16 hack
+        pos[0] -= 10
         return pos
 
     def nudgePix0(self, xpix0, ypix0, wavelength, row=None):
