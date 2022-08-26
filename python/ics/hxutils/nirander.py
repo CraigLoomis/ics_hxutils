@@ -1815,7 +1815,7 @@ def remeasure(spot, center, radius=10, mask=None,
    
 def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
                radius=10, searchRadius=5, skipDone=True, ims=None, trimBad=True, doClear=False,
-               convolveSigma=None, kernel=True, remask=False,
+               convolveSigma=None, kernel=True, remask=False, simpleBackground=False,
                rawSpots=False, r0=0, r1=-1):
     """Measure the best spots in a DataFrame of images
 
@@ -1898,6 +1898,7 @@ def measureSet(scans, meade=None, hxCalib=None, thresh=10, center=None,
                                       thresh=thresh,
                                       mask=hxCalib.badMask,
                                       convolveSigma=convolveSigma,
+                                      simpleBackground=simpleBackground,
                                       kernel=kernel)
         except Exception as e:
             logger.warning(f'getPeaks failed: {e}')
