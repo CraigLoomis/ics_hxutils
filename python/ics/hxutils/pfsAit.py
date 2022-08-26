@@ -495,7 +495,8 @@ def dispPlane(df, name, req=None, plotRange=None, pl=None,
 
     return f
 
-def dispSizes(df, atFocus=None, focusRange=None, title=None, debug=False):
+def dispSizes(df, atFocus=None, focusRange=None, title=None, debug=False,
+              sizeCol='size'):
     f, pl = plt.subplots(nrows=2, ncols=2, num='sizes',
                          clear=True, figsize=(10,10),
                          sharex=True, sharey=True, squeeze=False)
@@ -514,8 +515,8 @@ def dispSizes(df, atFocus=None, focusRange=None, title=None, debug=False):
     mm = []
     for name,grp in grps:
         mm.append((name[0], name[1], grp.ee1.max(), grp.ee3.max(), grp.ee5.max(),
-                   grp['size'].min()))
-    spotees = pd.DataFrame(mm, columns=['wavelength', 'row', 'ee1', 'ee3', 'ee5', 'size'])
+                   grp['size'].min(), grp['rms2'].min()))
+    spotees = pd.DataFrame(mm, columns=['wavelength', 'row', 'ee1', 'ee3', 'ee5', 'size', 'rms2'])
     spotees['focus'] = atFocus
 
     def _makePlotRange(name, req, under=0.5, over=1.1):
@@ -524,7 +525,7 @@ def dispSizes(df, atFocus=None, focusRange=None, title=None, debug=False):
     plots = (_makePlotRange('ee1', 0.085),
              _makePlotRange('ee3', 0.544),
              _makePlotRange('ee5', 0.907),
-             _makePlotRange('size', 18.9, under=1.5, over=0.9))
+             _makePlotRange(sizeCol, 18.9, under=1.5, over=0.9))
     if atFocus is None:
         label = "mean of BEST"
     else:
