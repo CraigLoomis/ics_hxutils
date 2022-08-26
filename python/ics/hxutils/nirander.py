@@ -1015,20 +1015,21 @@ def writeOneSpot(ditherFrame, rowIdx, spotIm, butler):
     path = butler.getPath('ditherSpot', idDict=spotIds)
     writeRowImage(path, spotRow, spotIm)
     
-def ditherPath(butler, row, pfsDay=None):
+def ditherPath(butler, row, raw=False, pfsDay=None):
+    partName = 'rawDither' if raw else 'dither'
     if pfsDay is None:
         idDict = dict(visit=int(row.visit),
                       wavelength=int(row.wavelength),
                       focus=int(row.focus),
                       row=int(row.row))
-        path = butler.getPath('dither', idDict=idDict)
+        path = butler.getPath(partName, idDict=idDict)
         return path
     else:
         idDict = dict(visit=int(row.visit),
                       wavelength=int(row.wavelength),
                       focus=int(row.focus),
                       row=int(row.row))
-        path = butler.search('dither', idDict=idDict,
+        path = butler.search(partName, idDict=idDict,
                              pfsDay=pfsDay)
         return path[0]
 
@@ -1208,7 +1209,7 @@ def allDithers(frames, hxCalib, rad=15, scale=3,
 
         if butler is not None:
             row = dithFrames.iloc[0]
-            path = ditherPath(butler, row)
+            path = ditherPath(butler, row, raw=True)
             idDict = writeRowImage(path, row, dith1)
             ids.append(idDict)
 
@@ -1921,10 +1922,14 @@ def takeSpot(meade, pos=None, focus=None, light=None, nread=3, comment="no_comme
         meade.lampsOff()
     return df
 
-def constructDitherFrame(cam, pfsDay, name):
+def constructDitherFrame(cam, pfsDay, name, raw=False):
     """Construct a dither DataFrame from a directory of dither images. """
-    flist = glob.glob(f'/data/redux/{cam}/{pfsDay}/{name}/dither-*.fits')
+
+    partName = 'rawDither' if raw else 'dither'
+    fglob = f'/data/redux/{cam}/{pfsDay}/{name}/{partName}-*.fits'
+    flist = glob.glob(fglob)
     flist = sorted(flist)
+    logger.warning(f'{len(flist)} dithers for {fglob}')
     waves = []
     rows = []
     focuses = []
