@@ -1016,7 +1016,6 @@ def createDither(frames, hxCalib, rad=10, meade=None,
     bkgndMask[2:-2, 2:-2] = 0
     maskIm = hxCalib.badMask[yslice,xslice]
     bkgndMask *= 1-(maskIm>0)
-    print(f"{bkgndMask.sum()}/{bkgndMask.size}")
     inIms = []
     for f_i, fIdx in enumerate(frames.index):
         f1 = frames.loc[fIdx]
@@ -1027,18 +1026,11 @@ def createDither(frames, hxCalib, rad=10, meade=None,
         im -= bkgnd
         maskedIm = im*bkgndMask
 
-        if f_i == 0:
-            normSum = np.sum(maskedIm, dtype='f8')
-        imSum = np.sum(maskedIm, dtype='f8')
-        if doNorm:
-            im *= (normSum/imSum).astype('f4')
         xoff = xoffsets[f1.xstep]
         yoff = yoffsets[f1.ystep]
         print(f'{f1.visit:0.0f}: wave: {f1.wavelength} row: {f1.row} focus: {f1.focus} '
               f'pix: {xoff} {yoff} {pixFromStep} step: {f1.xstep:0.0f},{f1.ystep:0.0f} '
               f'bkgnd: {bkgnd:0.3f} ')
-              #f'ctr: {f1.xpix:0.2f},{f1.ypix:0.2f} bkgnd: {bkgnd:0.3f} '
-              #f'scale: {normSum:0.1f}/{imSum:0.1f}={normSum/imSum:0.3f}')
         outIm[yoff::scale, xoff::scale] = im
         inIms.append(im)
 
@@ -1180,8 +1172,8 @@ def bestDitherSpot(frames, debug=False):
 
     return df
 
-def allDithers(frames, hxCalib, rad=15, scale=3,
-               butler=None, doNorm=False, meade=None, r1=-1,  
+def allDithers(frames, hxCalib, rad=10, scale=3,
+               butler=None, meade=None, r1=-1,  
                doMeasure=True, debug=False, writeSpots=False):
     """Compose dithers for all the complete dither sets.
 
@@ -1197,8 +1189,6 @@ def allDithers(frames, hxCalib, rad=15, scale=3,
         the number of spots making up the dither, by default 3
     butler : butler, optional
         know how to resolve paths, by default None
-    doNorm : bool, optional
-        Remove this, Craig, by default False
     meade : GimbalIlluminator, optional
         knows various things about the acquired data, by default None
     r1 : int, optional
@@ -1243,7 +1233,7 @@ def allDithers(frames, hxCalib, rad=15, scale=3,
             
         try:
             dith1, _, _ = createDither(dithFrames, hxCalib, rad=rad, scale=scale,
-                                       doNorm=doNorm, meade=meade,
+                                       meade=meade,
                                        r1=r1, writeSpots=writeSpots, butler=butler)
         except Exception as e:
             print(f'failed to create dither from {dithFrames.visit.values[0]}: {e}')
