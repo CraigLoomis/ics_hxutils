@@ -1794,8 +1794,177 @@ def rbSpot(spot):
 
     return rms, xMean-1, yMean-1
 
-def remeasure(spot, center, radius=10, mask=None, 
-              doTrim=False):
+def radGrid(stampRad):
+    """Make an image of distances from the center."""
+    if np.isscalar(stampRad):
+        xc = yc = stampRad
+        h = w = xc * 2 - 1
+    else:
+        xc = stampRad[0]
+        yc = stampRad[1]
+        w = xc * 2 - 1
+        h = yc * 2 - 1
+        
+    xx = np.linspace(0, w-1, w) - (xc-1)
+    yy = np.linspace(0, h-1, h) - (yc-1)
+    xs, ys = np.meshgrid(xx, yy)
+    
+    rgrid = np.sqrt(xs**2 + ys**2)
+    
+    return rgrid
+
+def subStamp(im, xc0, yc0, rad):
+    """Return the rad-wide subimage around (xc0,yc0)
+    
+    For rad=1, return a 1x1 pixel image
+    """
+    rad -= 1
+    xoff = round(xc0) - rad
+    yoff = round(yc0) - rad
+    stamp = im[yoff:yoff + 2*rad + 1, xoff:xoff + 2*rad + 1]
+
+    return stamp, xoff, yoff
+
+def apertureMask(radSpot, r0, r1=None):
+    if r1 is None:
+        return radSpot <= r0
+    if r0 == 0:
+        r0 = -1e-6
+    return (radSpot > r0) & (radSpot <= r1)
+
+def spotStampfromPeak(spot, peak, bkgdRadius=5):
+    """Get background-subtracted spot, using pre-measured size, center. """
+
+    spotMask = np.zeros_like(spot, dtype='bool')
+    spotMask[int(peak.ymin):int(peak.ymax)+1,
+             int(peak.xmin):int(peak.xmax)+1] = 1
+    bkgdMask = np.zeros_like(spot, dtype='bool')
+    bkgdMask[int(peak.ymin)-bkgdRadius:int(peak.ymax)+bkgdRadius+1,
+             int(peak.xmin)-bkgdRadius:int(peak.xmax)+bkgdRadius+1] = 1
+    bkgdMask[spotMask] = 0
+
+    bkgd = np.median(spot[bkgdMask])
+    spot = spot-bkgd
+    mspot = spot * spotMask
+    
+    return spot, mspot, spotMask, bkgdMask, bkgd
+
+def spotStampfromSpot(spot, center, radius=10, bkgdRadius=5, debug=False):
+    """Get background-subtracted spot, using given center """
+
+    if debug:
+        import pdb; pdb.set_trace()
+    xci, yci = [round(c) for c in center]
+    spotMask = np.zeros_like(spot, dtype='bool')
+    spotMask[yci-radius:yci+radius,
+             xci-radius:xci+radius] = 1
+    bkgdMask = np.zeros_like(spot, dtype='bool')
+    fullRadius = radius+bkgdRadius
+    bkgdMask[yci-fullRadius:yci+fullRadius,
+             xci-fullRadius:xci+fullRadius] = 1
+    bkgdMask[spotMask] = 0
+
+    bkgd = np.median(spot[bkgdMask])
+    spot = spot-bkgd
+    mspot = spot * spotMask
+
+    return spot, mspot, spotMask, bkgdMask, bkgd
+
+def measSpotRms(spot, center=None, spotFlux=None):
+    """Measure EE and RMS spot size using requirements algorithms
+
+    Parameters
+    ----------
+    spot : image
+        The postage stamp of the image. Bigger than needed.
+        Non-spot pixels all 0
+    center : pair, optional
+        x,y center. If None, remeasure
+    spotFlux : `float`
+        spot flux. If None, remeasure.
+
+    Returns
+    -------
+    RMS : float
+        the calculated spot size.
+    """
+
+    h, w = spot.shape
+    if spotFlux is None:
+        spotFlux = spot.sum()
+
+    xx = np.linspace(1, w, w)
+    yy = np.linspace(1, h, h)
+    xs, ys = np.meshgrid(xx, yy)
+    xcMeas = np.sum(xs*spot)/spotFlux - 1
+    ycMeas = np.sum(ys*spot)/spotFlux - 1
+
+    if center is not None:
+        xc, yc = center
+    else:
+        xc, yc = xcMeas, ycMeas
+    xci = round(xc)
+    yci = round(yc)
+            
+    xxc = np.linspace(0, w - 1, w) - round(xc)
+    yyc = np.linspace(0, h - 1, h) - round(yc)
+    xcs, ycs = np.meshgrid(xxc, yyc)
+    d = xcs**2 + ycs**2
+    dspot = d*spot
+
+    rmsList = []
+    for r in range(1,10):
+        dspotR, *_ = subStamp(dspot, xci, yci, r)
+        rmsR = 2*np.sqrt(np.sum(dspotR) / spotFlux)
+        rmsList.append(rmsR)
+    rms = 2*np.sqrt(np.sum(d*spot) / spotFlux)
+
+    ee1 = spot[yci, xci] / spotFlux
+    ee3 = spot[yci-1:yci+2, xci-1:xci+2].sum() / spotFlux
+    ee5 = spot[yci-2:yci+3, xci-2:xci+3].sum() / spotFlux
+
+    logger.warning(f'measRMS: ctr={xc:0.2f},{yc:0.2f} meas={xcMeas:0.2f},{ycMeas:0.2f} flux={spotFlux:0.2f},{spot.sum():0.2f} rms={rms:0.2f} ee={ee1:0.3f},{ee3:0.3f},{ee5:0.3f}')
+    
+    return ee1, ee3, ee5, rmsList, rms, (xc, yc), spotFlux, [xs, ys, xxc, yyc, d]
+
+def measSpotSep(spot, thresh=50, useErrors=False):
+    """Measure spot using sep
+
+    Parameters
+    ----------
+    spot : image
+        The postage stamp of the image. Bigger than needed.
+        Non-spot pixels all 0
+
+    Returns
+    -------
+    RMS : float
+        the calculated spot size.
+    """
+
+    h, w = spot.shape
+    hrad = (h + 1)//2
+    wrad = (w + 1)//2
+
+    if useErrors:
+        var = np.abs(spot)
+    else:
+        var = None
+    peaks = sep.extract(spot, thresh=thresh, var=var, 
+                        deblend_cont=1.0, clean=False)
+    if len(peaks) != 1:
+        logger.warning(f' {len(peaks)} peaks!')
+        p = peaks[np.argmax(peaks['flux'])]
+    else:
+        p = peaks[0]
+
+    xc, yc = p['x'], p['y']
+    spotFlux = p['flux']
+    rms = 2*np.sqrt(p['x2']+p['y2'])
+    logger.warning(f'measRMS: ctr={xc:0.2f},{yc:0.2f} flux={spotFlux:0.2f},{spot.sum():0.2f} rms={rms}')
+    
+    return rms, (xc, yc), spotFlux
+  
     
     ctrX, ctrY = [int(c) for c in center]
     if doTrim:
