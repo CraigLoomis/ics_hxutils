@@ -719,12 +719,24 @@ def ditherName(butler, group, raw=False, pfsDay='*'):
                visit=int(group.visit.min()),
                row=row)
 
-    path = butler.search('dither', pfsDay=pfsDay, **key)
+    partName = 'rawDither' if raw else 'dither' 
+    path = butler.search(partName, pfsDay=pfsDay, **key)
     return path[0]
+
+def ditherBox(disp, rows):
+    for i, row in rows.iterrows():
+        # print(i, row)
+        ctrx = (row.xmin + row.xmax)/2 + 1
+        ctry = (row.ymin + row.ymax)/2 + 1
+        w = (row.xmax - row.xmin + 1)
+        h = (row.ymax - row.ymin + 1)
+
+        disp.set('regions', f'image; box({ctrx},{ctry},{w},{h})')
 
 def dispDithers(disp, butler, ditherSet, wavelength, zoom=8,
                 scaleType='asinh', scaleLimits=None,
-                badMask=None, pfsDay='*'):
+                badMask=None, raw=False, pfsDay='*',
+                box=False):
     """Generate the canonical dither display: one page per wavelength, focus values per column."""
 
     waveDither = ditherSet[ditherSet.wavelength == wavelength].copy()
@@ -739,7 +751,7 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8,
               scaleType=scaleType, scaleLimits=scaleLimits)
 
     for name, group in waveGroups:
-        path = ditherName(butler, group, pfsDay=pfsDay)
+        path = ditherName(butler, group, raw=raw, pfsDay=pfsDay)
         print(name, path)
 
         im, hdr = fitsio.read(path, header=True)
@@ -757,12 +769,14 @@ def dispDithers(disp, butler, ditherSet, wavelength, zoom=8,
             imask = badMask[yslice, xslice]
             setMask(disp, imask)
         disp.set_np2arr(im)
+        if box:
+            ditherBox(disp, group)
 
     return waveGroups
 
 def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8,
                        scaleType='asinh', extraScale=None, scaleLimits=None,
-                       badMask=None, pfsDay='*', noteAt=None):
+                       badMask=None, raw=False, pfsDay='*', noteAt=None, box=False):
     """Generate a single-focus dither display"""
 
     focusDither = ditherSet[ditherSet.focus == focus].copy()
@@ -777,7 +791,7 @@ def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8,
               scaleType=scaleType, scaleLimits=scaleLimits)
 
     for name, group in waveGroups:
-        path = ditherName(butler, group, pfsDay=pfsDay)
+        path = ditherName(butler, group, raw=raw, pfsDay=pfsDay)
         print(name, path)
 
         im, hdr = fitsio.read(path, header=True)
@@ -798,6 +812,9 @@ def dispDithersAtFocus(disp, butler, ditherSet, focus, zoom=8,
         if extraScale is not None:
             im *= extraScale
         disp.set_np2arr(im)
+
+        if box:
+            ditherBox(disp, group)        
 
     return waveGroups
 
