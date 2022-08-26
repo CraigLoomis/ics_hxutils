@@ -1332,8 +1332,8 @@ def _loopByWaves(meade, butler, waves, rows, focus,
     return spotList
 
 def _loopByFocus(meade, butler, focus, rows, waves,
-                 doDither=False, nread=3, doWindow=True, 
-                 windowWidth=50, ditherFactor=1):
+                 doDither=False, nread=3, nramp=1,
+                 doWindow=True, windowWidth=50, ditherFactor=1):
     spotList = []
     for f_i, f in enumerate(focus):
         moveFocus(meade.cam, f)
@@ -1345,36 +1345,16 @@ def _loopByFocus(meade, butler, focus, rows, waves,
             for w_i, w in enumerate(waves):
                 pos = meade.getTargetPosition(w, row)
                 meade.led(w)
-                _, dutyCycle, _ = meade.ledState()
-                print(f"led {w} on row {int(row)} with focus {f}")
-                try:
-                    if doDither:
-                        meas = ditherScan(meade, pos=pos, nread=nread, row=row,
-                                          ditherFactor=ditherFactor)
-                    else:
-                        meade.moveToPix(*pos, preload=True, onlyIfNecessary=True)
-                        meas = takeBareSpot(meade, nread=nread, row=row,
-                                            comment=f'spotSet_{w}_{round(row)}_{round(f)}')
-                except Exception as e:
-                    raise
-
-                meas['row'] = int(row)
-                meas['focus'] = f
-                meas['wavelength'] = w
-                meas['dutyCycle'] = dutyCycle
-                spotList.append(meas)
-
-                rowFrame = pd.concat(spotList, ignore_index=True)
-                if butler is not None:
-                    outFileName = writeRawMeasures(butler, rowFrame)
-                    print(f"wrote {len(rowFrame)} lines to {outFileName} "
-                            f"at led {w} on row {row} with focus {f}")
+                spotFrame = _rampsForSpotLoop(meade, butler, w, row, f,
+                                              pos, nread, nramp,
+                                              doDither, ditherFactor)
+                spotList.append(spotFrame)
 
     return spotList
 
 def _loopOverPos(meade, butler, focus, posList,
                  doDither=False, nread=3, doWindow=True, 
-                 windowWidth=50, ditherFactor=1):
+                 windowWidth=50, ditherFactor=1, nramp=1):
     spotList = []
 
     for f_i, f in enumerate(focus):
@@ -1413,8 +1393,41 @@ def _loopOverPos(meade, butler, focus, posList,
 
     return spotList
 
+def _rampsForSpotLoop(meade, butler, wave, row, focus, pos, 
+                      nread, nramp, doDither, ditherFactor):
+    spotList = []
+    _, dutyCycle, _ = meade.ledState()
+
+    for r_i in range(nramp):
+        print(f"led {wave} on row {int(row)} with focus {focus} ({r_i+1}/{nramp})")
+        try:
+            if doDither:
+                meas = ditherScan(meade, pos=pos, nread=nread, row=row,
+                                    ditherFactor=ditherFactor)
+            else:
+                meade.moveToPix(*pos, preload=True, onlyIfNecessary=True)
+                meas = takeBareSpot(meade, nread=nread, row=row,
+                                    comment=f'spotSet_{wave}_{round(row)}_{round(focus)}')
+
+        except Exception as e:
+            raise
+
+        meas['row'] = int(row)
+        meas['focus'] = focus
+        meas['wavelength'] = wave
+        meas['dutyCycle'] = dutyCycle
+        spotList.append(meas)
+
+    rowFrame = pd.concat(spotList, ignore_index=True)
+    if butler is not None:
+        outFileName = writeRawMeasures(butler, rowFrame)
+        print(f"wrote {len(rowFrame)} lines to {outFileName} "
+                f"at led {wave} on row {row} with focus {focus}")
+
+    return rowFrame
+
 def spotSet(meade, butler=None, waves=None, rows=None, posList=None, focus=None,
-            doDither=False, nread=3, doWindow=True, windowWidth=50, ditherFactor=1,
+            doDither=False, nread=3, nramp=1, doWindow=True, windowWidth=50, ditherFactor=1,
             byFocus=True):
     """Primary acquisition routine: takes a (wave, row, focus) grid of spots or dithers
 
@@ -1479,18 +1492,18 @@ def spotSet(meade, butler=None, waves=None, rows=None, posList=None, focus=None,
     try:
         if posList is not None:
             spotList = _loopOverPos(meade, butler, focus, posList,
-                                    doDither=doDither, nread=nread,
+                                    doDither=doDither, nread=nread, nramp=nramp,
                                     doWindow=doWindow, windowWidth=windowWidth,
                                     ditherFactor=ditherFactor)
         elif byFocus:
             spotList = _loopByFocus(meade, butler, focus, rows, waves,
-                                    doDither=doDither, nread=nread,
+                                    doDither=doDither, nread=nread, nramp=nramp,
                                     doWindow=doWindow, windowWidth=windowWidth,
                                     ditherFactor=ditherFactor)
 
         else:
             spotList = _loopByWaves(meade, butler, waves, rows, focus,
-                                    doDither=doDither, nread=nread,
+                                    doDither=doDither, nread=nread, nramp=nramp,
                                     doWindow=doWindow, windowWidth=windowWidth,
                                     ditherFactor=ditherFactor)
 
