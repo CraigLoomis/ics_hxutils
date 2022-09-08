@@ -726,12 +726,14 @@ def ditherName(butler, group, raw=False, pfsDay='*'):
 def ditherBox(disp, rows):
     for i, row in rows.iterrows():
         # print(i, row)
-        ctrx = (row.xmin + row.xmax)/2 + 1
-        ctry = (row.ymin + row.ymax)/2 + 1
+        ctrx = (row.xmin + row.xmax)/2 + 0.5
+        ctry = (row.ymin + row.ymax)/2 + 0.5
         w = (row.xmax - row.xmin + 1)
         h = (row.ymax - row.ymin + 1)
 
         disp.set('regions', f'image; box({ctrx},{ctry},{w},{h})')
+        disp.set('regions', f'image; point({ctrx},{ctry}) # color=green point=cross 7')
+        disp.set('regions', f'image; point({row.xpix + 1},{row.ypix + 1}) # color=red point=x 7')
 
 def dispDithers(disp, butler, ditherSet, wavelength, zoom=8,
                 scaleType='asinh', scaleLimits=None,
